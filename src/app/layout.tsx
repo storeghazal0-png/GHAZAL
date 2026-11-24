@@ -119,6 +119,7 @@ export default function RootLayout({
     <html 
       lang="ar" 
       dir="rtl" 
+      suppressHydrationWarning
       className={`light ${cairo.variable} ${tajawal.variable}`} 
       style={{ colorScheme: 'only light', backgroundColor: '#ffffff' }}
     >
@@ -155,6 +156,7 @@ export default function RootLayout({
         />
       </head>
       <body 
+        suppressHydrationWarning
         className="antialiased min-h-screen flex flex-col bg-white text-zinc-900" 
         style={{ colorScheme: 'only light', backgroundColor: '#ffffff' }}
       >
