@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { filsToDisplay } from '@/lib/money';
-import { Search, Plus, Sparkles, Tag, Trash2, Edit3, Globe, ShoppingBag, Eye, EyeOff, Loader2, Layers, CheckCircle2, ScanLine, Camera } from 'lucide-react';
+import { Search, Plus, Sparkles, Tag, Trash2, Edit3, Globe, ShoppingBag, Eye, EyeOff, Loader2, Layers, CheckCircle2, ScanLine, Camera, ArrowRight } from 'lucide-react';
 import { deleteProduct, toggleProductStoreVisibility, toggleProductPOSVisibility, updateProductChannelAction, findProductByBarcodeOrSkuAction } from '@/actions/products';
 import { CameraBarcodeScannerModal } from '@/components/CameraBarcodeScannerModal';
 
@@ -56,6 +56,16 @@ export function AdminProductsClient({
   const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const [isSearchingBarcode, setIsSearchingBarcode] = useState(false);
   const [scannerNotification, setScannerNotification] = useState<string | null>(null);
+  const [redirectFallbackUrl, setRedirectFallbackUrl] = useState<string | null>(null);
+
+  // Pagination: Load 30 products at a time with "عرض المزيد"
+  const PAGE_SIZE = 30;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Reset pagination on search or channel tab change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, activeChannelTab]);
 
   // Exact Channel product counts
   const totalCount = productList.length;
@@ -105,6 +115,11 @@ export function AdminProductsClient({
     );
   }, [productList, search, activeChannelTab]);
 
+  // Slice filtered products to show visibleCount (30 at a time)
+  const displayedProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
+
   // Handle Barcode Scanned via Camera / Phone
   const handleBarcodeScanned = async (scannedBarcode: string) => {
     setIsBarcodeScannerOpen(false);
@@ -112,21 +127,22 @@ export function AdminProductsClient({
     if (!code) return;
 
     setIsSearchingBarcode(true);
-    setScannerNotification(`جارٍ فحص الباركود: ${code}...`);
+    setScannerNotification(`جارٍ فحص الباركود (${code})...`);
 
     // 1. Search in local product list
     const localMatch = productList.find(p => 
+      p.id === code ||
       p.barcode === code || 
-      p.sku === code ||
-      p.variants?.some((v: any) => v.barcode === code || v.sku === code)
+      p.sku?.toLowerCase() === code.toLowerCase() ||
+      p.variants?.some((v: any) => v.barcode === code || v.sku?.toLowerCase() === code.toLowerCase())
     );
 
     if (localMatch) {
-      setScannerNotification(`تم العثور على المنتج: "${localMatch.nameAr}" — جاري الانتقال للتعديل...`);
-      setTimeout(() => {
-        setIsSearchingBarcode(false);
-        router.push(`/admin/products/${localMatch.id}`);
-      }, 400);
+      const editUrl = `/admin/products/${localMatch.id}`;
+      setRedirectFallbackUrl(editUrl);
+      setScannerNotification(`تم العثور على المنتج: "${localMatch.nameAr || localMatch.nameEn}" — جاري فتح صفحة التعديل...`);
+      // Direct navigation for mobile reliability
+      window.location.assign(editUrl);
       return;
     }
 
@@ -134,11 +150,10 @@ export function AdminProductsClient({
     try {
       const res = await findProductByBarcodeOrSkuAction(code);
       if (res?.success && res.product?.id) {
-        setScannerNotification(`تم العثور على المنتج: "${res.product.nameAr}" — جاري الانتقال للتعديل...`);
-        setTimeout(() => {
-          setIsSearchingBarcode(false);
-          router.push(`/admin/products/${res.product.id}`);
-        }, 400);
+        const editUrl = `/admin/products/${res.product.id}`;
+        setRedirectFallbackUrl(editUrl);
+        setScannerNotification(`تم العثور على المنتج: "${res.product.nameAr || res.product.nameEn}" — جاري فتح صفحة التعديل...`);
+        window.location.assign(editUrl);
         return;
       }
     } catch (err) {
@@ -146,12 +161,11 @@ export function AdminProductsClient({
     }
 
     // 3. Not found: Open "Add New Product" with prefilled barcode parameter
-    setScannerNotification(`الباركود (${code}) جديد وغير مسجل! جاري فتح صفحة إضافة منتج جديد...`);
-    setTimeout(() => {
-      setIsSearchingBarcode(false);
-      const targetChannel = activeChannelTab === 'ALL' ? 'POS' : activeChannelTab;
-      router.push(`/admin/products/new?barcode=${encodeURIComponent(code)}&channel=${targetChannel}`);
-    }, 600);
+    const targetChannel = activeChannelTab === 'ALL' ? 'POS' : activeChannelTab;
+    const addUrl = `/admin/products/new?barcode=${encodeURIComponent(code)}&channel=${targetChannel}`;
+    setRedirectFallbackUrl(addUrl);
+    setScannerNotification(`الباركود (${code}) غير مسجل مسبقاً! جاري فتح صفحة إضافة منتج جديد...`);
+    window.location.assign(addUrl);
   };
 
   const toggleSelectAll = () => {
@@ -280,7 +294,7 @@ export function AdminProductsClient({
             </h1>
           </div>
           <p className="text-zinc-500 mt-1 text-sm">
-            التحكم المباشر بالعرض في المتجر والكاشير، الدرجات، الباركود، والأسعار • {productList.length} منتج
+            التحكم المباشر بالعرض في المتجر والكاشير، الدرجات، الباركود، والأسعار • عرض {displayedProducts.length} من {filteredProducts.length} منتج (إجمالي النظام: {productList.length})
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto items-stretch sm:items-center">
@@ -410,11 +424,20 @@ export function AdminProductsClient({
       {/* شاشة انتظار الفحص والتوجيه التلقائي */}
       {isSearchingBarcode && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center gap-3 text-center max-w-sm border border-pink-100">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center gap-3 text-center max-w-sm border border-pink-100 animate-fade-in">
             <Loader2 className="w-8 h-8 text-[#E6007E] animate-spin" />
             <p className="font-bold text-sm text-zinc-800 leading-relaxed">
               {scannerNotification || 'جاري فحص الباركود...'}
             </p>
+            {redirectFallbackUrl && (
+              <a
+                href={redirectFallbackUrl}
+                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-[#E6007E] hover:bg-[#c9006e] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+              >
+                <span>اضغط هنا إذا لم يتم التحويل تلقائياً</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
         </div>
       )}
@@ -445,7 +468,7 @@ export function AdminProductsClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {filteredProducts.map((product) => {
+              {displayedProducts.map((product) => {
                 const mainImage = product.images?.[0];
                 const isSelected = selectedIds.includes(product.id);
                 const isStoreBusy = busyIds[`store_${product.id}`];
@@ -662,7 +685,7 @@ export function AdminProductsClient({
 
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-6 py-16 text-center">
+                  <td colSpan={11} className="px-6 py-16 text-center">
                     <p className="text-zinc-500 mb-2">لا توجد منتجات تطابق البحث.</p>
                   </td>
                 </tr>
@@ -670,6 +693,31 @@ export function AdminProductsClient({
             </tbody>
           </table>
         </div>
+
+        {/* Load More Pagination (عرض المزيد) */}
+        {filteredProducts.length > visibleCount && (
+          <div className="p-6 bg-zinc-50/80 border-t border-zinc-200 flex flex-col items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+              className="inline-flex items-center gap-2.5 px-6 py-2.5 bg-[#E6007E] hover:bg-[#c9006e] text-white font-extrabold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+            >
+              <span>عرض المزيد (+30 منتج)</span>
+              <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-[11px] font-mono">
+                {displayedProducts.length} من {filteredProducts.length}
+              </span>
+            </button>
+            <p className="text-[11px] text-zinc-500 font-medium">
+              يتم تحميل 30 منتج في كل دفعة لضمان أقصى سرعة وسلاسة تصفح.
+            </p>
+          </div>
+        )}
+
+        {filteredProducts.length > 0 && filteredProducts.length <= visibleCount && (
+          <div className="text-center py-4 text-xs font-bold text-zinc-400 border-t border-zinc-100 bg-zinc-50/50">
+            ✓ تم عرض كافة المنتجات المتاحة ({filteredProducts.length} منتج)
+          </div>
+        )}
       </div>
     </div>
   );

@@ -25,14 +25,39 @@ export default async function AdminProductsPage({
   try {
     products = await prisma.product.findMany({
       orderBy: { createdAt: 'desc' },
-      include: {
-        category: true,
-        brand: true,
-        variants: true,
-        images: { where: { isMain: true }, take: 1 }
+      select: {
+        id: true,
+        slug: true,
+        nameAr: true,
+        nameEn: true,
+        sku: true,
+        channel: true,
+        isVisible: true,
+        reviewReasons: true,
+        category: { select: { id: true, name: true } },
+        brand: { select: { id: true, name: true, nameAr: true } },
+        variants: {
+          select: {
+            id: true,
+            size: true,
+            shade: true,
+            price: true,
+            costPrice: true,
+            barcode: true,
+            sku: true,
+            isActive: true
+          }
+        },
+        images: {
+          where: { isMain: true },
+          select: { url: true, isMain: true },
+          take: 1
+        }
       }
     });
-    categories = await prisma.category.findMany();
+    categories = await prisma.category.findMany({
+      select: { id: true, name: true }
+    });
   } catch (err) {
     console.warn('Prisma product query skipped:', err);
   }

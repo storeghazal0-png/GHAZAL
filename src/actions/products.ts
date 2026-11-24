@@ -625,7 +625,9 @@ export async function findProductByBarcodeOrSkuAction(code: string) {
           { sku: { equals: clean, mode: 'insensitive' } },
           { id: clean },
           { variants: { some: { barcode: clean } } },
-          { variants: { some: { sku: { equals: clean, mode: 'insensitive' } } } }
+          { variants: { some: { barcode: { equals: clean, mode: 'insensitive' } } } },
+          { variants: { some: { sku: { equals: clean, mode: 'insensitive' } } } },
+          { variants: { some: { barcode: { contains: clean, mode: 'insensitive' } } } }
         ]
       },
       select: {

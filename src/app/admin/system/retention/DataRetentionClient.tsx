@@ -130,7 +130,7 @@ export function DataRetentionClient({ initialStatus }: Props) {
           </div>
         </div>
         <div className="text-xs text-emerald-900 font-mono bg-white/80 px-3 py-1.5 rounded-xl border border-emerald-200 self-start sm:self-auto shrink-0 shadow-2xs">
-          آخر دورة: {status.lastCleanup?.executedAt ? new Date(status.lastCleanup.executedAt).toLocaleDateString('ar-JO', { dateStyle: 'medium', timeStyle: 'short' }) : 'مجدولة للتنفيذ الآلي القادم'}
+          آخر دورة: {status.lastCleanup?.executedAt ? new Date(status.lastCleanup.executedAt).toLocaleString('ar-JO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'مجدولة للتنفيذ الآلي القادم'}
         </div>
       </div>
 

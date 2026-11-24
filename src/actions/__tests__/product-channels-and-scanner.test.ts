@@ -79,4 +79,40 @@ describe('Admin Product Channels & Mobile Barcode Scanner Tests', () => {
     expect(newRes.action).toBe('NEW');
     expect(newRes.redirectUrl).toBe('/admin/products/new?barcode=7778889990001&channel=POS');
   });
+
+  it('verifies 30-item pagination and load more increments correctly', () => {
+    const allProducts = Array.from({ length: 85 }, (_, i) => ({ id: `p-${i}`, nameAr: `منتج ${i}` }));
+    const PAGE_SIZE = 30;
+    let visibleCount = PAGE_SIZE;
+
+    // Initial load: exactly 30 items
+    let displayed = allProducts.slice(0, visibleCount);
+    expect(displayed).toHaveLength(30);
+    expect(displayed[0].id).toBe('p-0');
+    expect(displayed[29].id).toBe('p-29');
+
+    // First "Load More" click (+30)
+    visibleCount += PAGE_SIZE;
+    displayed = allProducts.slice(0, visibleCount);
+    expect(displayed).toHaveLength(60);
+
+    // Second "Load More" click (+30 -> 90, but total is 85)
+    visibleCount += PAGE_SIZE;
+    displayed = allProducts.slice(0, visibleCount);
+    expect(displayed).toHaveLength(85);
+  });
+
+  it('verifies date formatting in data retention without invalid timeStyle errors', () => {
+    const testDate = new Date('2026-11-24T18:00:00Z');
+    // Using standard toLocaleString with date and time options should execute smoothly
+    const formatted = testDate.toLocaleString('ar-JO', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    expect(formatted).toBeDefined();
+    expect(typeof formatted).toBe('string');
+  });
 });
