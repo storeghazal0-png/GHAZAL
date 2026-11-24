@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
 import { getEmployeePermissions } from '@/lib/dal';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import path from 'path';
-import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 
 // Dynamic safe loader for sharp to prevent serverless function crashes when libvips is absent
 async function getSharp() {
@@ -24,6 +23,25 @@ const ALLOWED_EXTENSIONS = new Set([
   '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff',
   '.mp4', '.webm', '.ogg', '.mov', '.m4v'
 ]);
+
+// Supabase Storage bucket name
+const STORAGE_BUCKET = 'product-uploads';
+
+function getSupabaseAdminClient() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) {
+    throw new Error('Supabase environment variables not configured (SUPABASE_URL, SUPABASE_SECRET_KEY)');
+  }
+  return createClient(url, key, {
+    auth: { persistSession: false }
+  });
+}
+
+function extOf(filename: string): string {
+  const idx = filename.lastIndexOf('.');
+  return idx >= 0 ? filename.slice(idx).toLowerCase() : '';
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,7 +81,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    const ext = path.extname(file.name).toLowerCase();
+    const ext = extOf(file.name);
     
     // Disallow SVG and executables to prevent Stored XSS and remote code execution
     if (!ALLOWED_EXTENSIONS.has(ext)) {
@@ -75,8 +93,9 @@ export async function POST(req: NextRequest) {
 
     let finalBuffer = rawBuffer;
     let finalExt = ext;
+    let contentType = file.type || 'application/octet-stream';
 
-    // Convert raster images to WebP
+    // Convert raster images to WebP (skip GIF to preserve animation)
     if (isImage && ext !== '.gif') {
       try {
         const sharpInstance = await getSharp();
@@ -85,6 +104,7 @@ export async function POST(req: NextRequest) {
             .webp({ quality: 82, effort: 4 })
             .toBuffer();
           finalExt = '.webp';
+          contentType = 'image/webp';
         }
       } catch (sharpError) {
         console.warn('Sharp WebP conversion skipped, using original:', sharpError);
@@ -92,18 +112,54 @@ export async function POST(req: NextRequest) {
     }
 
     const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${finalExt}`;
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+
+    // ─── Upload to Supabase Storage ─────────────────────────────────────────
+    const supabase = getSupabaseAdminClient();
+
+    // Ensure the bucket exists (create if it doesn't yet)
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(b => b.name === STORAGE_BUCKET);
+    if (!bucketExists) {
+      const { error: createErr } = await supabase.storage.createBucket(STORAGE_BUCKET, {
+        public: true,
+        fileSizeLimit: MAX_FILE_SIZE_BYTES,
+        allowedMimeTypes: [
+          'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff',
+          'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'
+        ]
+      });
+      if (createErr) {
+        console.error('Could not create bucket:', createErr);
+        // Continue anyway — it may already exist on the Supabase side
+      }
     }
 
-    const localFilePath = path.join(uploadsDir, filename);
-    fs.writeFileSync(localFilePath, finalBuffer);
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filename, finalBuffer, {
+        contentType,
+        upsert: false,
+        cacheControl: '31536000' // 1 year CDN cache
+      });
+
+    if (uploadError) {
+      console.error('Supabase Storage upload error:', uploadError);
+      return NextResponse.json({
+        success: false,
+        error: `فشل رفع الملف إلى التخزين السحابي: ${uploadError.message}`
+      }, { status: 500 });
+    }
+
+    // Build public URL
+    const { data: urlData } = supabase.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(uploadData.path);
 
     return NextResponse.json({
       success: true,
-      url: `/uploads/${filename}`
+      url: urlData.publicUrl
     });
+
   } catch (error: any) {
     console.error('API Upload Error:', error);
     return NextResponse.json({

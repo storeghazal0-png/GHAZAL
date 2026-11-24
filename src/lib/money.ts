@@ -688,3 +688,26 @@ export function calculateProfitAndLoss(params: {
     isLoss
   };
 }
+
+/**
+ * Normalizes and sanitizes user input for numeric currency / price fields.
+ * Converts Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) to standard Western digits (0123456789),
+ * converts commas (, or ،) to decimal points (.), strips disallowed characters,
+ * and preserves a single valid decimal point during active typing.
+ */
+export function sanitizePriceInput(val: string): string {
+  if (!val) return '';
+  // Convert Arabic-Indic numerals to ASCII
+  const western = val.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+  // Normalize commas to decimal dot
+  const dotted = western.replace(/[,،]/g, '.');
+  // Strip any characters that are not digits or dot
+  const clean = dotted.replace(/[^0-9.]/g, '');
+  // Keep only the first decimal point if multiple are entered
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    return parts[0] + '.' + parts.slice(1).join('');
+  }
+  return clean;
+}
+

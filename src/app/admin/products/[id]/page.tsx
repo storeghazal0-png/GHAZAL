@@ -109,6 +109,8 @@ export default async function AdminProductEditPage({
       barcode: v.barcode || '',
       sku: v.sku,
       price: v.price,
+      costPrice: v.costPrice ?? (v.price ? Math.round(v.price * 0.55) : 0),
+      compareAt: v.compareAt ?? undefined,
       isActive: v.isActive
     })),
     images: product.images.map((img: any) => ({
