@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/dal';
 import { revalidatePath } from 'next/cache';
 import { DATA_RETENTION_CONFIG } from '@/lib/data-retention-config';
+import { performDataRetentionCleanup } from '@/lib/data-retention';
 
 export interface DataRetentionStatus {
   invoices: {
@@ -27,6 +28,7 @@ export interface DataRetentionStatus {
   };
   lastCleanup: {
     executedAt: string | null;
+    trigger?: string;
     deletedInvoicesCount: number;
     deletedLogsCount: number;
     deletedSessionsCount: number;
@@ -36,6 +38,11 @@ export interface DataRetentionStatus {
     isSafe: boolean;
     tierLimitMb: number;
     statusMessage: string;
+  };
+  automatedSchedule: {
+    enabled: boolean;
+    frequency: string;
+    description: string;
   };
 }
 
@@ -143,18 +150,19 @@ export async function getDataRetentionStatusAction(): Promise<DataRetentionStatu
       isSafe: true,
       tierLimitMb: 500, // Supabase Free Tier 500 MB
       statusMessage: totalPrunable > 0 
-        ? `يوجد ${totalPrunable} سجل منتهي الصلاحية جاهز للتفريغ للحفاظ على مساحة الخطة المجانية.`
+        ? `يوجد ${totalPrunable} سجل منتهي الصلاحية مجدول للتفريغ تلقائياً أسبوعياً للحفاظ على مساحة الخطة المجانية.`
         : 'قاعدة البيانات نظيفة ومحسنة تماماً ومطابقة لسياسة الـ 90 والـ 30 يوماً.'
+    },
+    automatedSchedule: {
+      enabled: true,
+      frequency: 'أسبوعياً كل يوم أحد الساعة 02:00 فجراً (توقيت عمّان)',
+      description: 'تشغيل دوري مؤتمت عبر GitHub Actions و Vercel Cron يقوم بحذف السجلات المنتهية بدون تدخل بشري.'
     }
   };
 }
 
 /**
- * تنفيذ دورة تنظيف وتفريغ المساحة لقاعدة البيانات
- * - حذف الفواتير وإيصالات الكاشير الأقدم من 30 يوماً
- * - حذف سجلات التدقيق، المحاولات، والأحداث الأقدم من 90 يوماً
- * - حذف الجلسات المنتهية
- * - ضمان حماية دائمة 100% للمنتجات والأقسام والماركات والإعدادات
+ * إجراء المشرف لتشغيل دورة تنظيف وحفظ المساحة يدوياً مع فحص صلاحيات الإدارة
  */
 export async function executeDataRetentionCleanupAction(): Promise<{
   success: boolean;
@@ -166,125 +174,13 @@ export async function executeDataRetentionCleanupAction(): Promise<{
   timestamp: string;
 }> {
   await requirePermission('manage:settings');
-
-  const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - DATA_RETENTION_CONFIG.invoicesDays * 24 * 60 * 60 * 1000);
-  const ninetyDaysAgo = new Date(now.getTime() - DATA_RETENTION_CONFIG.systemLogsDays * 24 * 60 * 60 * 1000);
-
-  let deletedInvoices = 0;
-  let deletedLogs = 0;
-  let deletedSessions = 0;
+  const result = await performDataRetentionCleanup({ trigger: 'MANUAL' });
 
   try {
-    // 1. Delete Invoices older than 30 days
-    try {
-      const resInvoices = await prisma.invoice.deleteMany({
-        where: { createdAt: { lt: thirtyDaysAgo } }
-      });
-      deletedInvoices += resInvoices.count;
-    } catch (e) {
-      console.warn('Invoices cleanup warning:', e);
-    }
-
-    // Also delete any suspended temporary cart sales (HeldSale) older than 30 days
-    try {
-      await prisma.heldSale.deleteMany({
-        where: { createdAt: { lt: thirtyDaysAgo } }
-      });
-    } catch {}
-
-    // 2. Delete Audit Logs & Events older than 90 days
-    try {
-      const resAudit = await prisma.auditLog.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
-      });
-      deletedLogs += resAudit.count;
-    } catch (e) {
-      console.warn('AuditLog cleanup warning:', e);
-    }
-
-    try {
-      const resRate = await prisma.rateLimitEvent.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
-      });
-      deletedLogs += resRate.count;
-    } catch {}
-
-    try {
-      const resLogin = await prisma.loginAttempt.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
-      });
-      deletedLogs += resLogin.count;
-    } catch {}
-
-    try {
-      await prisma.pendingMfaChallenge.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
-      });
-    } catch {}
-
-    try {
-      await prisma.importJob.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
-      });
-    } catch {}
-
-    // 3. Delete Expired Sessions & Sessions older than 90 days
-    try {
-      const resSessions = await prisma.session.deleteMany({
-        where: {
-          OR: [
-            { expiresAt: { lt: now } },
-            { createdAt: { lt: ninetyDaysAgo } }
-          ]
-        }
-      });
-      deletedSessions += resSessions.count;
-    } catch (e) {
-      console.warn('Sessions cleanup warning:', e);
-    }
-
-    const totalDeleted = deletedInvoices + deletedLogs + deletedSessions;
-    const cleanupRecord = {
-      executedAt: now.toISOString(),
-      deletedInvoicesCount: deletedInvoices,
-      deletedLogsCount: deletedLogs,
-      deletedSessionsCount: deletedSessions,
-      totalDeleted
-    };
-
-    // Save cleanup audit record in siteSettings
-    try {
-      await prisma.siteSettings.upsert({
-        where: { key: 'data_retention_last_cleanup' },
-        update: { value: JSON.stringify(cleanupRecord) },
-        create: { key: 'data_retention_last_cleanup', value: JSON.stringify(cleanupRecord) }
-      });
-    } catch {}
-
     revalidatePath('/admin');
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/system/retention');
+  } catch {}
 
-    return {
-      success: true,
-      message: `تم تنظيف وتفريغ ${totalDeleted} سجل بنجاح. الفواتير محددة بـ 30 يوماً، والسجلات بـ 90 يوماً، والمنتجات والبيانات الرئيسية محفوظة بالكامل ودائمة.`,
-      deletedInvoices,
-      deletedLogs,
-      deletedSessions,
-      totalDeleted,
-      timestamp: now.toISOString()
-    };
-  } catch (err: any) {
-    console.error('Error during data retention cleanup:', err);
-    return {
-      success: false,
-      message: err.message || 'حدث خطأ أثناء تنظيف البيانات',
-      deletedInvoices,
-      deletedLogs,
-      deletedSessions,
-      totalDeleted: 0,
-      timestamp: now.toISOString()
-    };
-  }
+  return result;
 }

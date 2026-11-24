@@ -92,20 +92,45 @@ export function DataRetentionClient({ initialStatus }: Props) {
             type="button"
             onClick={handleRunCleanup}
             disabled={isPending}
-            className="flex items-center gap-2 bg-[#E6007E] hover:bg-[#c4006b] disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition cursor-pointer"
+            className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
           >
             {isPending ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>جاري التنظيف وتفريغ المساحة...</span>
+                <span>جاري التنظيف الآن...</span>
               </>
             ) : (
               <>
                 <Trash2 className="w-4 h-4" />
-                <span>تشغيل دورة تنظيف المساحة الآن</span>
+                <span>تشغيل يدوي فوري (اختياري)</span>
               </>
             )}
           </button>
+        </div>
+      </div>
+
+      {/* Automated Schedule Status Card */}
+      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-emerald-950">
+                الدورة التلقائية مجدولة ونشطة (Automated Weekly Retention Active)
+              </h3>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 text-[10px] font-extrabold">
+                تعمل تلقائياً
+              </span>
+            </div>
+            <p className="text-xs text-emerald-800 mt-0.5">
+              تُنفذ دورة التنظيف تلقائياً كل <strong>أحد الساعة 02:00 فجراً</strong> (توقيت عمّان) عبر GitHub Actions و Vercel Crons لحماية سعة الـ 500MB المجانية، دون الحاجة لأي تشغيل يدوي.
+            </p>
+          </div>
+        </div>
+        <div className="text-xs text-emerald-900 font-mono bg-white/80 px-3 py-1.5 rounded-xl border border-emerald-200 self-start sm:self-auto shrink-0 shadow-2xs">
+          آخر دورة: {status.lastCleanup?.executedAt ? new Date(status.lastCleanup.executedAt).toLocaleDateString('ar-JO', { dateStyle: 'medium', timeStyle: 'short' }) : 'مجدولة للتنفيذ الآلي القادم'}
         </div>
       </div>
 
