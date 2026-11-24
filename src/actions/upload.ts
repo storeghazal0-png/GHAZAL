@@ -4,7 +4,16 @@ import { requirePermission, requireAuth } from '@/lib/dal';
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import fs from 'fs';
-import sharp from 'sharp';
+
+// Dynamic safe loader for sharp to avoid missing libvips shared library errors in serverless runtimes
+async function getSharp() {
+  try {
+    const mod = await import('sharp');
+    return mod.default || mod;
+  } catch {
+    return null;
+  }
+}
 
 // Setup Supabase admin client to bypass RLS and create buckets if needed
 const getSupabaseAdmin = () => {
@@ -101,11 +110,14 @@ export async function uploadMedia(formData: FormData): Promise<{ success: boolea
     // Automatic permanent conversion to .webp for optimal compression and fast rendering
     if (isImage) {
       try {
-        finalBuffer = await sharp(rawBuffer)
-          .webp({ quality: 82, effort: 4 })
-          .toBuffer();
-        finalExt = '.webp';
-        finalContentType = 'image/webp';
+        const sharpInstance = await getSharp();
+        if (sharpInstance) {
+          finalBuffer = await sharpInstance(rawBuffer)
+            .webp({ quality: 82, effort: 4 })
+            .toBuffer();
+          finalExt = '.webp';
+          finalContentType = 'image/webp';
+        }
       } catch (sharpError) {
         console.warn('Sharp WebP conversion warning, using original buffer:', sharpError);
       }

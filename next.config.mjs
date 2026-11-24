@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ['argon2', 'sharp', 'xlsx', '@prisma/client', '@prisma/adapter-pg', 'pg'],
+  serverExternalPackages: ['argon2', 'xlsx', '@prisma/client', '@prisma/adapter-pg', 'pg'],
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',

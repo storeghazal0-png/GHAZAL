@@ -107,3 +107,6 @@ scratch_*.ts
 .gemini
 .system_generated
 brain
+
+# Local Netlify folder
+.netlify

@@ -4,7 +4,16 @@ import { getEmployeePermissions } from '@/lib/dal';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import path from 'path';
 import fs from 'fs';
-import sharp from 'sharp';
+
+// Dynamic safe loader for sharp to prevent serverless function crashes when libvips is absent
+async function getSharp() {
+  try {
+    const mod = await import('sharp');
+    return mod.default || mod;
+  } catch {
+    return null;
+  }
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -70,10 +79,13 @@ export async function POST(req: NextRequest) {
     // Convert raster images to WebP
     if (isImage && ext !== '.gif') {
       try {
-        finalBuffer = await sharp(rawBuffer)
-          .webp({ quality: 82, effort: 4 })
-          .toBuffer();
-        finalExt = '.webp';
+        const sharpInstance = await getSharp();
+        if (sharpInstance) {
+          finalBuffer = await sharpInstance(rawBuffer)
+            .webp({ quality: 82, effort: 4 })
+            .toBuffer();
+          finalExt = '.webp';
+        }
       } catch (sharpError) {
         console.warn('Sharp WebP conversion skipped, using original:', sharpError);
       }
