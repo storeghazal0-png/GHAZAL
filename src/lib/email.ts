@@ -24,8 +24,8 @@ export interface NewOrderEmailPayload {
   createdAt?: string;
 }
 
-const DEFAULT_FROM = 'onboarding@resend.dev';
-const DEFAULT_TO = 'storeghazal0@gmail.com';
+const DEFAULT_FROM = 'orders@ghazal.jo';
+const DEFAULT_TO = 'admin@ghazal.jo';
 
 function formatJOD(fils: number): string {
   return (fils / 1000).toFixed(3) + ' د.أ';

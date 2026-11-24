@@ -125,7 +125,7 @@ export async function getBackupSystemStatusAction(): Promise<BackupSystemStatus>
   const resendTo =
     process.env.BACKUP_EMAIL_TO ||
     process.env.RESEND_ORDER_NOTIFICATION_EMAIL ||
-    'storeghazal0@gmail.com';
+    'admin@ghazal.jo';
 
   return {
     supabase: supabaseStatus,
