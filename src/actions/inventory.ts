@@ -60,54 +60,8 @@ interface InventoryState {
 }
 
 const memoryInventory: InventoryState = (globalThis as any).__ghazal_inventory_state || {
-  counts: {
-    'v1': { physicalStock: 18, notes: 'مطابق بعد العد على الرف الأول', lastAuditedAt: new Date().toISOString() },
-    'v11': { physicalStock: 12, notes: 'عجز 2 حبة (تستر تجريبي للزبائن)', lastAuditedAt: new Date().toISOString() },
-    'v2': { physicalStock: 8, notes: 'مطابق تماماً', lastAuditedAt: new Date().toISOString() },
-    'v3': { physicalStock: 25, notes: 'فائض 3 حبات إضافية من طلبية التوريد', lastAuditedAt: new Date().toISOString() },
-    'v4': { physicalStock: 14, notes: 'عجز 1 حبة تالفة بالكرتون', lastAuditedAt: new Date().toISOString() }
-  },
-  vouchers: [
-    {
-      id: 'vch-001',
-      voucherNumber: 'INV-STK-2026-001',
-      type: 'SETTLEMENT',
-      title: 'فاتورة تسوية فروقات الجرد الدوري للربع الأول',
-      createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-      auditorName: 'أمين المستودع: أحمد القضاة',
-      reason: 'تسوية العجز الناتج عن عينات التجربة (Testers) داخل صالة العرض',
-      totalItemsCount: 5,
-      totalBookValueFils: 940000,
-      totalActualValueFils: 955000,
-      netVarianceFils: 15000,
-      items: [
-        {
-          id: 'v11',
-          sku: 'SKU-LOR-TRUE-3N',
-          barcode: '3600522862413',
-          name: 'كريم أساس لوريال ترو ماتش',
-          specification: '30ml - 3N Creamy Beige',
-          bookStock: 14,
-          physicalStock: 12,
-          difference: -2,
-          unitCostFils: 11000,
-          totalDiffFils: -22000
-        },
-        {
-          id: 'v3',
-          sku: 'SKU-THE-NIAC-30',
-          barcode: '769915190601',
-          name: 'سيروم ذا أورديناري نياسيناميد',
-          specification: '30ml',
-          bookStock: 22,
-          physicalStock: 25,
-          difference: 3,
-          unitCostFils: 7500,
-          totalDiffFils: 22500
-        }
-      ]
-    }
-  ]
+  counts: {},
+  vouchers: []
 };
 (globalThis as any).__ghazal_inventory_state = memoryInventory;
 

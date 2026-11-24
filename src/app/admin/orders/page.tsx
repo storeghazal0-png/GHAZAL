@@ -36,6 +36,7 @@ export default async function AdminOrdersPage({
   const normalizedTab = currentTab === 'PENDING' ? 'NEW' : currentTab;
 
   let orders: any[] = [];
+  let allOrdersForCounts: { id: string; status: string }[] = [];
   try {
     const whereClause: any = {};
     if (normalizedTab !== 'ALL') {
@@ -50,29 +51,31 @@ export default async function AdminOrdersPage({
       ];
     }
 
-    orders = await prisma.order.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        items: true
-      }
-    });
+    const [dbOrders, countList] = await Promise.all([
+      prisma.order.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true
+        }
+      }),
+      prisma.order.findMany({
+        select: { id: true, status: true }
+      })
+    ]);
+    orders = dbOrders;
+    allOrdersForCounts = countList;
   } catch (err) {
-    console.warn('Prisma orders query fallback active, using demo catalog');
+    console.warn('Prisma orders query failed');
   }
 
-  // Fallback to in-memory orders if DB returns none or during local development
-  if (orders.length === 0) {
-    orders = getDemoOrders(normalizedTab, searchQuery);
-  }
-
-  // Calculate live badge counts for the tabs
+  // Calculate live badge counts for the tabs from database
   const getTabCount = (tabKey: string) => {
     if (tabKey === 'ALL') {
-      return GHAZAL_DEMO_ORDERS.length;
+      return allOrdersForCounts.length;
     }
     const statuses = tabStatusMap[tabKey] || [];
-    return GHAZAL_DEMO_ORDERS.filter(o => statuses.includes(o.status)).length;
+    return allOrdersForCounts.filter(o => statuses.includes(o.status)).length;
   };
 
   const getStatusBadge = (status: string) => {

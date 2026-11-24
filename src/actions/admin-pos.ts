@@ -21,45 +21,7 @@ export interface CustomerRecord {
   createdAt: string;
 }
 
-const resilientCustomers: CustomerRecord[] = (globalThis as any).__ghazal_resilient_customers || [
-  {
-    id: 'cust-01',
-    name: 'سارة أحمد التميمي',
-    phone: '0791234567',
-    email: 'sara.tamimi@example.com',
-    city: 'عمّان',
-    totalOrdersCount: 8,
-    totalSpentFils: 142500, // 142.500 JOD
-    creditBalanceFils: 0,
-    lastPurchaseDate: new Date(Date.now() - 86400000 * 2).toISOString(),
-    notes: 'عميلة دائمة - تفضل ماركات لوريال ومايبيلين',
-    createdAt: new Date(Date.now() - 86400000 * 60).toISOString()
-  },
-  {
-    id: 'cust-02',
-    name: 'دانا خالد المحيسن',
-    phone: '0789876543',
-    email: 'dana.k@example.com',
-    city: 'عين الباشا',
-    totalOrdersCount: 4,
-    totalSpentFils: 68000, // 68.000 JOD
-    creditBalanceFils: 12000, // 12.000 JOD debt
-    lastPurchaseDate: new Date(Date.now() - 86400000 * 5).toISOString(),
-    notes: 'حساب ذمة معتمد',
-    createdAt: new Date(Date.now() - 86400000 * 30).toISOString()
-  },
-  {
-    id: 'cust-03',
-    name: 'رنا زياد الصالح',
-    phone: '0775551234',
-    city: 'صويلح',
-    totalOrdersCount: 2,
-    totalSpentFils: 31000,
-    creditBalanceFils: 0,
-    lastPurchaseDate: new Date(Date.now() - 86400000 * 10).toISOString(),
-    createdAt: new Date(Date.now() - 86400000 * 20).toISOString()
-  }
-];
+const resilientCustomers: CustomerRecord[] = (globalThis as any).__ghazal_resilient_customers || [];
 (globalThis as any).__ghazal_resilient_customers = resilientCustomers;
 
 export async function getAllCustomers(query?: string) {

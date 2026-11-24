@@ -81,36 +81,39 @@ export async function login(prevState: any, formData: FormData) {
   const { email, password } = parsed.data;
   const loginType = formData.get('loginType') as string;
 
-  // 1. Resilient Credentials Match for GHAZAL Admin & Cashier
-  const isAdminMatch = (email.toLowerCase() === 'admin@ghazal.jo' || email.toLowerCase() === 'admin@ghazal.com') && 
-    (password === 'AdminPassword2026!' || password === 'admin123' || password === 'admin');
-  const isCashierMatch = (email.toLowerCase() === 'cashier@ghazal.jo' || email.toLowerCase() === 'cashier@ghazal.com') && 
-    (password === 'Cashier2026!' || password === 'cashier123' || password === '1234');
-
-  // Immediate authorization for official accounts without dependency on external DB
-  if (isAdminMatch || isCashierMatch) {
-    if (loginType === 'admin' && isCashierMatch) {
-      return { error: 'خطأ في البريد الإلكتروني أو كلمة المرور' };
-    }
-    const role = isAdminMatch ? 'ADMIN' : 'CASHIER';
-    const empId = isAdminMatch ? 'emp-admin-ghazal-01' : 'emp-cashier-ghazal-01';
-    const sessionData = await createSession(empId, role);
-    await setSessionCookie(sessionData.token, sessionData.expiresAt, sessionData.role);
-    if (role === 'CASHIER' || loginType === 'pos') {
-      redirect('/pos/cashier');
-    } else {
-      redirect('/admin/dashboard');
-    }
-  }
-
   let employee: any = null;
+  let dbFailed = false;
   try {
     employee = await prisma.employee.findUnique({
       where: { email },
       include: { role: true }
     });
   } catch (dbErr) {
+    dbFailed = true;
     console.warn('Prisma lookup failed:', dbErr);
+  }
+
+  // Fallback only if database connection failed completely
+  if (dbFailed && !employee) {
+    const isAdminMatch = (email.toLowerCase() === 'admin@ghazal.jo' || email.toLowerCase() === 'admin@ghazal.com') && 
+      (password === 'AdminPassword2026!' || password === 'admin123' || password === 'admin');
+    const isCashierMatch = (email.toLowerCase() === 'cashier@ghazal.jo' || email.toLowerCase() === 'cashier@ghazal.com') && 
+      (password === 'Cashier2026!' || password === 'cashier123' || password === '1234');
+
+    if (isAdminMatch || isCashierMatch) {
+      if (loginType === 'admin' && isCashierMatch) {
+        return { error: 'خطأ في البريد الإلكتروني أو كلمة المرور' };
+      }
+      const role = isAdminMatch ? 'ADMIN' : 'CASHIER';
+      const empId = isAdminMatch ? '58dfffee-dca2-49f9-8004-e6578bcafa28' : '85136564-c467-4a39-9412-bc545f45f9f1';
+      const sessionData = await createSession(empId, role);
+      await setSessionCookie(sessionData.token, sessionData.expiresAt, sessionData.role);
+      if (role === 'CASHIER' || loginType === 'pos') {
+        redirect('/pos/cashier');
+      } else {
+        redirect('/admin/dashboard');
+      }
+    }
   }
   
   if (!employee) {

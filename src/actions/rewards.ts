@@ -151,7 +151,7 @@ const INITIAL_REWARD_RULES: RewardRule[] = [
     stackingBehavior: 'APPLY_HIGHEST_ONLY',
     totalUsageLimit: 100,
     perCustomerLimit: 1,
-    currentUsageCount: 42,
+    currentUsageCount: 0,
     startsAt: new Date(Date.now() - 86400000 * 15).toISOString(),
     endsAt: new Date(Date.now() + 86400000 * 45).toISOString(),
     isActive: true,
@@ -176,7 +176,7 @@ const INITIAL_REWARD_RULES: RewardRule[] = [
     stackingBehavior: 'STACK_ALL_QUALIFIED',
     totalUsageLimit: 50,
     perCustomerLimit: 1,
-    currentUsageCount: 28,
+    currentUsageCount: 0,
     startsAt: new Date(Date.now() - 86400000 * 10).toISOString(),
     endsAt: new Date(Date.now() + 86400000 * 20).toISOString(),
     isActive: true,
@@ -200,7 +200,7 @@ const INITIAL_REWARD_RULES: RewardRule[] = [
     stackingBehavior: 'STACK_ALL_QUALIFIED',
     totalUsageLimit: 500,
     perCustomerLimit: 5,
-    currentUsageCount: 89,
+    currentUsageCount: 0,
     startsAt: new Date(Date.now() - 86400000 * 30).toISOString(),
     endsAt: new Date(Date.now() + 86400000 * 60).toISOString(),
     isActive: true,
@@ -224,7 +224,7 @@ const INITIAL_REWARD_RULES: RewardRule[] = [
     stackingBehavior: 'APPLY_HIGHEST_ONLY',
     totalUsageLimit: 30,
     perCustomerLimit: 1,
-    currentUsageCount: 30,
+    currentUsageCount: 0,
     startsAt: new Date(Date.now() - 86400000 * 20).toISOString(),
     endsAt: new Date(Date.now() + 86400000 * 10).toISOString(),
     isActive: false,
@@ -249,7 +249,7 @@ const INITIAL_REWARD_RULES: RewardRule[] = [
     stackingBehavior: 'APPLY_HIGHEST_ONLY',
     totalUsageLimit: 100,
     perCustomerLimit: 1,
-    currentUsageCount: 14,
+    currentUsageCount: 0,
     startsAt: new Date(Date.now() - 86400000 * 5).toISOString(),
     endsAt: new Date(Date.now() - 86400000 * 1).toISOString(),
     isActive: false,
@@ -259,153 +259,13 @@ const INITIAL_REWARD_RULES: RewardRule[] = [
   }
 ];
 
-const INITIAL_REDEMPTIONS: RewardRedemptionRecord[] = [
-  {
-    id: 'rdm-101',
-    orderId: 'ghaz-ord-5481',
-    orderNumber: '5481',
-    customerName: 'سارة أحمد التميمي',
-    customerPhone: '0791234567',
-    ruleId: 'rew-rule-1',
-    ruleTitle: 'هدية أحمر شفاه مايبيلين سوبر ستاي عند الشراء بأكثر من 35 د.أ',
-    rewardType: 'FREE_GIFT',
-    rewardDetailAr: 'هدية مجانية: أحمر شفاه مايبيلين فينيل 020',
-    discountCostFils: 0,
-    estimatedGiftCostFils: 5775,
-    basketTotalFils: 48500,
-    orderStatus: 'DELIVERED',
-    redeemedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    isReversed: false
-  },
-  {
-    id: 'rdm-102',
-    orderId: 'ghaz-ord-5482',
-    orderNumber: '5482',
-    customerName: 'دانا خالد المحيسن',
-    customerPhone: '0789876543',
-    ruleId: 'rew-rule-3',
-    ruleTitle: 'توصيل مجاني لكافة محافظات المملكة للطلبات 25 د.أ فأكثر',
-    rewardType: 'FREE_SHIPPING',
-    rewardDetailAr: 'إعفاء كامل من رسوم التوصيل (عمان)',
-    discountCostFils: 2000,
-    estimatedGiftCostFils: 0,
-    basketTotalFils: 32000,
-    orderStatus: 'DELIVERED',
-    redeemedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    isReversed: false
-  },
-  {
-    id: 'rdm-103',
-    orderId: 'ghaz-ord-5483',
-    orderNumber: '5483',
-    customerName: 'أم ليث (الزبونة الدائمة)',
-    customerPhone: '0798765432',
-    ruleId: 'rew-rule-2',
-    ruleTitle: 'اختاري هديتكِ من تشكيلة العناية بالبشرة للطلبات فوق 50 د.أ',
-    rewardType: 'FREE_GIFT',
-    rewardDetailAr: 'هدية باختيار العميلة: سيروم نياسيناميد ذا أورديناري',
-    discountCostFils: 0,
-    estimatedGiftCostFils: 4125,
-    basketTotalFils: 64000,
-    orderStatus: 'DELIVERED',
-    redeemedAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    isReversed: false
-  },
-  {
-    id: 'rdm-104',
-    orderId: 'ghaz-ord-5484',
-    orderNumber: '5484',
-    customerName: 'هديل الوريكات',
-    customerPhone: '0771234567',
-    ruleId: 'rew-rule-4',
-    ruleTitle: 'خصم نقدي 5.000 د.أ عند الشراء بقيمة 40 د.أ فما فوق',
-    rewardType: 'FIXED_DISCOUNT',
-    rewardDetailAr: 'خصم نقدي فوري -5.000 د.أ',
-    discountCostFils: 5000,
-    estimatedGiftCostFils: 0,
-    basketTotalFils: 42500,
-    orderStatus: 'DELIVERED',
-    redeemedAt: new Date(Date.now() - 86400000 * 6).toISOString(),
-    isReversed: false
-  },
-  {
-    id: 'rdm-105',
-    orderId: 'ghaz-ord-5485',
-    orderNumber: '5485',
-    customerName: 'رنا زياد الصالح',
-    customerPhone: '0775551234',
-    ruleId: 'rew-rule-1',
-    ruleTitle: 'هدية أحمر شفاه مايبيلين سوبر ستاي عند الشراء بأكثر من 35 د.أ',
-    rewardType: 'FREE_GIFT',
-    rewardDetailAr: 'هدية مجانية: أحمر شفاه مايبيلين فينيل 020',
-    discountCostFils: 0,
-    estimatedGiftCostFils: 5775,
-    basketTotalFils: 39000,
-    orderStatus: 'IN_TRANSIT',
-    redeemedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-    isReversed: false
-  },
-  {
-    id: 'rdm-106',
-    orderId: 'ghaz-ord-5486',
-    orderNumber: '5486',
-    customerName: 'مي خليل',
-    customerPhone: '0799988776',
-    ruleId: 'rew-rule-1',
-    ruleTitle: 'هدية أحمر شفاه مايبيلين سوبر ستاي عند الشراء بأكثر من 35 د.أ',
-    rewardType: 'FREE_GIFT',
-    rewardDetailAr: 'هدية مجانية: أحمر شفاه مايبيلين (ملغي ومسترد التكلفة)',
-    discountCostFils: 0,
-    estimatedGiftCostFils: 5775,
-    basketTotalFils: 36000,
-    orderStatus: 'CANCELLED',
-    redeemedAt: new Date(Date.now() - 86400000 * 8).toISOString(),
-    isReversed: true,
-    reversalReason: 'تم إلغاء الطلبية واسترجاع الهدية للمخزون وعكس أثر التكلفة'
-  },
-  {
-    id: 'rdm-107',
-    orderId: 'ghaz-ord-5487',
-    orderNumber: '5487',
-    customerName: 'فرح عبد الله',
-    customerPhone: '0781119988',
-    ruleId: 'rew-rule-3',
-    ruleTitle: 'توصيل مجاني لكافة محافظات المملكة للطلبات 25 د.أ فأكثر',
-    rewardType: 'FREE_SHIPPING',
-    rewardDetailAr: 'إعفاء رسوم التوصيل (إربد)',
-    discountCostFils: 3000,
-    estimatedGiftCostFils: 0,
-    basketTotalFils: 29500,
-    orderStatus: 'DELIVERED',
-    redeemedAt: new Date(Date.now() - 86400000 * 12).toISOString(),
-    isReversed: false
-  },
-  {
-    id: 'rdm-108',
-    orderId: 'ghaz-ord-5488',
-    orderNumber: '5488',
-    customerName: 'نور الهدى',
-    customerPhone: '0792223344',
-    ruleId: 'rew-rule-2',
-    ruleTitle: 'اختاري هديتكِ من تشكيلة العناية بالبشرة للطلبات فوق 50 د.أ',
-    rewardType: 'FREE_GIFT',
-    rewardDetailAr: 'هدية باختيار العميلة: غسول سيرافي المرطب',
-    discountCostFils: 0,
-    estimatedGiftCostFils: 7150,
-    basketTotalFils: 58000,
-    orderStatus: 'DELIVERED',
-    redeemedAt: new Date(Date.now() - 86400000 * 14).toISOString(),
-    isReversed: false
-  }
-];
+const INITIAL_REDEMPTIONS: RewardRedemptionRecord[] = [];
 
 // In-Memory store
 if (!(globalThis as any).__ghazal_reward_rules) {
   (globalThis as any).__ghazal_reward_rules = INITIAL_REWARD_RULES;
 }
-if (!(globalThis as any).__ghazal_reward_redemptions) {
-  (globalThis as any).__ghazal_reward_redemptions = INITIAL_REDEMPTIONS;
-}
+(globalThis as any).__ghazal_reward_redemptions = [];
 
 const INITIAL_REWARD_SETTINGS: RewardSystemSettings = {
   multiGiftResolution: 'HIGHEST_TIER_ONLY', // اعتماد هدية الشريحة الأعلى فقط تلقائياً (مثلاً 50د تحل محل 35د)

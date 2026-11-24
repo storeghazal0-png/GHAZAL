@@ -33,7 +33,7 @@ export default function AdminInventoryClient({ initialItems, initialVouchers }: 
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [voucherTitle, setVoucherTitle] = useState('فاتورة تسوية فروقات الجرد المستودعي');
   const [voucherReason, setVoucherReason] = useState('تسوية العجز والفائض الدوري المعتمد بعد الجرد الفعلي للمحل');
-  const [auditorName, setAuditorName] = useState('أمين المستودع: أحمد القضاة');
+  const [auditorName, setAuditorName] = useState('مدير النظام / أمين المستودع');
   const [voucherSuccessMsg, setVoucherSuccessMsg] = useState<string | null>(null);
 
   // View Single Voucher Modal State

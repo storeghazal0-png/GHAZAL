@@ -4361,7 +4361,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
                   type="text"
                   name="cashier"
                   required
-                  defaultValue="محمود العمري (كاشير غزل)"
+                  defaultValue="كاشير الفرع الرئيسي"
                   className="w-full border border-slate-200 rounded-xl p-2.5 outline-none font-bold"
                 />
               </div>
