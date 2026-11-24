@@ -133,16 +133,22 @@ export async function runBackupOrchestrator(
       const tempDumpPath = path.join(process.cwd(), `.temp_${runId}.sql`);
       try {
         execSync(
-          `pg_dump "${sourceUrl}" --schema=public --no-owner --no-privileges --clean --if-exists -f "${tempDumpPath}"`,
+          `pg_dump "${sourceUrl}" --schema=public --no-owner --no-privileges -f "${tempDumpPath}"`,
           { stdio: 'inherit' }
         );
 
         let sqlContent = fs.readFileSync(tempDumpPath, 'utf8');
         dumpSizeBytes = Buffer.byteLength(sqlContent, 'utf8');
 
-        // Rewrite public. schema targets to ghazal_backup_staging.
+        // Remove any DROP/CREATE schema statements to completely protect target public schema
+        sqlContent = sqlContent
+          .replace(/DROP SCHEMA[^\n;]*;/gi, '')
+          .replace(/CREATE SCHEMA[^\n;]*;/gi, '')
+          .replace(/SELECT pg_catalog\.set_config\('search_path', '', false\);/g, "SELECT pg_catalog.set_config('search_path', 'ghazal_backup_staging, public', false);");
+
+        // Rewrite public. and "public". schema targets to ghazal_backup_staging.
         sqlContent = `SET search_path = ghazal_backup_staging, public;\n` +
-          sqlContent.replace(/public\./g, 'ghazal_backup_staging.');
+          sqlContent.replace(/(?:\"public\"|public)\./g, 'ghazal_backup_staging.');
 
         fs.writeFileSync(tempDumpPath, sqlContent, 'utf8');
         log(`  Applying dump to Neon staging (${(dumpSizeBytes / (1024 * 1024)).toFixed(2)} MB)...`);
