@@ -9,14 +9,17 @@ import { performDataRetentionCleanup } from '@/lib/data-retention';
 export interface DataRetentionStatus {
   invoices: {
     total: number;
+    olderThan90Days: number;
     olderThan30Days: number;
     retentionDays: number;
   };
   systemLogs: {
     auditLogsTotal: number;
     auditLogsOlderThan90Days: number;
+    auditLogsPrunable: number;
     rateLimitEventsTotal: number;
     rateLimitEventsOlderThan90Days: number;
+    rateLimitEventsPrunable: number;
     expiredSessionsTotal: number;
     retentionDays: number;
   };
@@ -51,15 +54,15 @@ export interface DataRetentionStatus {
  */
 export async function getDataRetentionStatusAction(): Promise<DataRetentionStatus> {
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - DATA_RETENTION_CONFIG.invoicesDays * 24 * 60 * 60 * 1000);
-  const ninetyDaysAgo = new Date(now.getTime() - DATA_RETENTION_CONFIG.systemLogsDays * 24 * 60 * 60 * 1000);
+  const invoicesCutoff = new Date(now.getTime() - DATA_RETENTION_CONFIG.invoicesDays * 24 * 60 * 60 * 1000);
+  const systemLogsCutoff = DATA_RETENTION_CONFIG.systemLogsDays === 0 ? now : new Date(now.getTime() - DATA_RETENTION_CONFIG.systemLogsDays * 24 * 60 * 60 * 1000);
 
   let invoicesTotal = 0;
-  let invoicesOlderThan30Days = 0;
+  let invoicesOlderThanCutoff = 0;
   let auditLogsTotal = 0;
-  let auditLogsOlderThan90Days = 0;
+  let auditLogsPrunable = 0;
   let rateLimitEventsTotal = 0;
-  let rateLimitEventsOlderThan90Days = 0;
+  let rateLimitEventsPrunable = 0;
   let expiredSessionsTotal = 0;
   let productsCount = 0;
   let categoriesCount = 0;
@@ -67,27 +70,27 @@ export async function getDataRetentionStatusAction(): Promise<DataRetentionStatu
   let lastCleanup: any = null;
 
   try {
-    // 1. Invoices metrics (30 days limit)
+    // 1. Invoices metrics (90 days limit)
     try {
-      [invoicesTotal, invoicesOlderThan30Days] = await Promise.all([
+      [invoicesTotal, invoicesOlderThanCutoff] = await Promise.all([
         prisma.invoice.count(),
-        prisma.invoice.count({ where: { createdAt: { lt: thirtyDaysAgo } } })
+        prisma.invoice.count({ where: { createdAt: { lt: invoicesCutoff } } })
       ]);
     } catch {}
 
-    // 2. System logs metrics (90 days limit)
+    // 2. System logs metrics (0 days / no retention, purged completely)
     try {
-      [auditLogsTotal, auditLogsOlderThan90Days] = await Promise.all([
-        prisma.auditLog.count(),
-        prisma.auditLog.count({ where: { createdAt: { lt: ninetyDaysAgo } } })
-      ]);
+      auditLogsTotal = await prisma.auditLog.count();
+      auditLogsPrunable = DATA_RETENTION_CONFIG.systemLogsDays === 0
+        ? auditLogsTotal
+        : await prisma.auditLog.count({ where: { createdAt: { lte: systemLogsCutoff } } });
     } catch {}
 
     try {
-      [rateLimitEventsTotal, rateLimitEventsOlderThan90Days] = await Promise.all([
-        prisma.rateLimitEvent.count(),
-        prisma.rateLimitEvent.count({ where: { createdAt: { lt: ninetyDaysAgo } } })
-      ]);
+      rateLimitEventsTotal = await prisma.rateLimitEvent.count();
+      rateLimitEventsPrunable = DATA_RETENTION_CONFIG.systemLogsDays === 0
+        ? rateLimitEventsTotal
+        : await prisma.rateLimitEvent.count({ where: { createdAt: { lte: systemLogsCutoff } } });
     } catch {}
 
     try {
@@ -95,7 +98,7 @@ export async function getDataRetentionStatusAction(): Promise<DataRetentionStatu
         where: {
           OR: [
             { expiresAt: { lt: now } },
-            { createdAt: { lt: ninetyDaysAgo } }
+            { createdAt: { lte: systemLogsCutoff } }
           ]
         }
       });
@@ -123,19 +126,22 @@ export async function getDataRetentionStatusAction(): Promise<DataRetentionStatu
     console.warn('Error reading data retention status:', err);
   }
 
-  const totalPrunable = invoicesOlderThan30Days + auditLogsOlderThan90Days + rateLimitEventsOlderThan90Days + expiredSessionsTotal;
+  const totalPrunable = invoicesOlderThanCutoff + auditLogsPrunable + rateLimitEventsPrunable + expiredSessionsTotal;
 
   return {
     invoices: {
       total: invoicesTotal,
-      olderThan30Days: invoicesOlderThan30Days,
+      olderThan90Days: invoicesOlderThanCutoff,
+      olderThan30Days: invoicesOlderThanCutoff,
       retentionDays: DATA_RETENTION_CONFIG.invoicesDays
     },
     systemLogs: {
       auditLogsTotal,
-      auditLogsOlderThan90Days,
+      auditLogsOlderThan90Days: auditLogsPrunable,
+      auditLogsPrunable,
       rateLimitEventsTotal,
-      rateLimitEventsOlderThan90Days,
+      rateLimitEventsOlderThan90Days: rateLimitEventsPrunable,
+      rateLimitEventsPrunable,
       expiredSessionsTotal,
       retentionDays: DATA_RETENTION_CONFIG.systemLogsDays
     },
@@ -150,8 +156,8 @@ export async function getDataRetentionStatusAction(): Promise<DataRetentionStatu
       isSafe: true,
       tierLimitMb: 500, // Supabase Free Tier 500 MB
       statusMessage: totalPrunable > 0 
-        ? `يوجد ${totalPrunable} سجل منتهي الصلاحية مجدول للتفريغ تلقائياً أسبوعياً للحفاظ على مساحة الخطة المجانية.`
-        : 'قاعدة البيانات نظيفة ومحسنة تماماً ومطابقة لسياسة الـ 90 والـ 30 يوماً.'
+        ? `يوجد ${totalPrunable} سجل مؤقت مجدول للتفريغ تلقائياً أسبوعياً للحفاظ على مساحة الخطة المجانية.`
+        : 'قاعدة البيانات نظيفة ومحسنة تماماً ومطابقة لسياسة الـ 90 يوماً للفواتير وعدم حفظ سجلات النظام.'
     },
     automatedSchedule: {
       enabled: true,

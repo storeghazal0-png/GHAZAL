@@ -11,8 +11,8 @@ async function main() {
 
     console.log(`✅ Success: ${result.success}`);
     console.log(`📊 Total records cleaned: ${result.totalDeleted}`);
-    console.log(`   - Invoices deleted (> 30 days): ${result.deletedInvoices}`);
-    console.log(`   - System logs & events deleted (> 90 days): ${result.deletedLogs}`);
+    console.log(`   - Invoices deleted (> 90 days): ${result.deletedInvoices}`);
+    console.log(`   - System logs & transient events purged: ${result.deletedLogs}`);
     console.log(`   - Expired sessions deleted: ${result.deletedSessions}`);
     console.log(`💬 Message: ${result.message}\n`);
     console.log('🎉 Data Retention cycle completed successfully!');

@@ -5,7 +5,7 @@ export interface DataRetentionPolicy {
 }
 
 export const DATA_RETENTION_CONFIG: DataRetentionPolicy = {
-  invoicesDays: 30, // مدة الاحتفاظ بالفواتير وإيصالات الكاشير: 30 يوماً فقط
-  systemLogsDays: 90, // مدة الاحتفاظ بسجلات الموقع والعمليات المنتهية: 90 يوماً فقط
+  invoicesDays: 90, // مدة الاحتفاظ بالفواتير وإيصالات الكاشير: 90 يوماً
+  systemLogsDays: 0, // لا يتم حفظ السجلات والعمليات المؤقتة المنتهية نهائياً (تفريغ كامل)
   coreEntitiesRetention: 'PERMANENT' // المنتجات والتصنيفات والبيانات الرئيسية دائمة للأبد
 };

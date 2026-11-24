@@ -19,35 +19,35 @@ export interface DataRetentionCleanupResult {
 export async function performDataRetentionCleanup(options: { trigger?: string } = {}): Promise<DataRetentionCleanupResult> {
   const trigger = options.trigger || 'AUTOMATED';
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - DATA_RETENTION_CONFIG.invoicesDays * 24 * 60 * 60 * 1000);
-  const ninetyDaysAgo = new Date(now.getTime() - DATA_RETENTION_CONFIG.systemLogsDays * 24 * 60 * 60 * 1000);
+  const invoicesCutoff = new Date(now.getTime() - DATA_RETENTION_CONFIG.invoicesDays * 24 * 60 * 60 * 1000);
+  const systemLogsCutoff = DATA_RETENTION_CONFIG.systemLogsDays === 0 ? now : new Date(now.getTime() - DATA_RETENTION_CONFIG.systemLogsDays * 24 * 60 * 60 * 1000);
 
   let deletedInvoices = 0;
   let deletedLogs = 0;
   let deletedSessions = 0;
 
   try {
-    // 1. Delete Invoices older than 30 days
+    // 1. Delete Invoices older than retention cutoff (90 days)
     try {
       const resInvoices = await prisma.invoice.deleteMany({
-        where: { createdAt: { lt: thirtyDaysAgo } }
+        where: { createdAt: { lt: invoicesCutoff } }
       });
       deletedInvoices += resInvoices.count;
     } catch (e) {
       console.warn('Invoices cleanup warning:', e);
     }
 
-    // Also delete any suspended temporary cart sales (HeldSale) older than 30 days
+    // Also delete any suspended temporary cart sales (HeldSale) older than cutoff
     try {
       await prisma.heldSale.deleteMany({
-        where: { createdAt: { lt: thirtyDaysAgo } }
+        where: { createdAt: { lt: invoicesCutoff } }
       });
     } catch {}
 
-    // 2. Delete Audit Logs & Events older than 90 days
+    // 2. Delete Audit Logs & Events (purged completely if systemLogsDays === 0)
     try {
       const resAudit = await prisma.auditLog.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
+        where: { createdAt: { lte: systemLogsCutoff } }
       });
       deletedLogs += resAudit.count;
     } catch (e) {
@@ -56,39 +56,39 @@ export async function performDataRetentionCleanup(options: { trigger?: string } 
 
     try {
       const resRate = await prisma.rateLimitEvent.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
+        where: { createdAt: { lte: systemLogsCutoff } }
       });
       deletedLogs += resRate.count;
     } catch {}
 
     try {
       const resLogin = await prisma.loginAttempt.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
+        where: { createdAt: { lte: systemLogsCutoff } }
       });
       deletedLogs += resLogin.count;
     } catch {}
 
     try {
       const resMfa = await prisma.pendingMfaChallenge.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
+        where: { createdAt: { lte: systemLogsCutoff } }
       });
       deletedLogs += resMfa.count;
     } catch {}
 
     try {
       const resJobs = await prisma.importJob.deleteMany({
-        where: { createdAt: { lt: ninetyDaysAgo } }
+        where: { createdAt: { lte: systemLogsCutoff } }
       });
       deletedLogs += resJobs.count;
     } catch {}
 
-    // 3. Delete Expired Sessions & Sessions older than 90 days
+    // 3. Delete Expired Sessions & Sessions older than cutoff
     try {
       const resSessions = await prisma.session.deleteMany({
         where: {
           OR: [
             { expiresAt: { lt: now } },
-            { createdAt: { lt: ninetyDaysAgo } }
+            { createdAt: { lte: systemLogsCutoff } }
           ]
         }
       });
@@ -118,7 +118,7 @@ export async function performDataRetentionCleanup(options: { trigger?: string } 
 
     return {
       success: true,
-      message: `تم تنظيف وتفريغ ${totalDeleted} سجل بنجاح (${trigger === 'MANUAL' ? 'تشغيل يدوي' : 'دورة مجدولة تلقائياً'}). الفواتير محددة بـ 30 يوماً، والسجلات بـ 90 يوماً، والمنتجات والبيانات الرئيسية محفوظة بالكامل ودائمة.`,
+      message: `تم تنظيف وتفريغ ${totalDeleted} سجل بنجاح (${trigger === 'MANUAL' ? 'تشغيل يدوي' : 'دورة مجدولة تلقائياً'}). الفواتير محددة بـ ${DATA_RETENTION_CONFIG.invoicesDays} يوماً، وسجلات النظام لا تحفظ نهائياً وتفرغ بالكامل، والمنتجات والبيانات الرئيسية محفوظة بالكامل ودائمة.`,
       deletedInvoices,
       deletedLogs,
       deletedSessions,

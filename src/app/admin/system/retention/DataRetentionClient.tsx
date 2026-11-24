@@ -22,7 +22,7 @@ export function DataRetentionClient({ initialStatus }: Props) {
 
   const handleRunCleanup = () => {
     const confirmed = window.confirm(
-      'هل تؤكدين تشغيل دورة تنظيف وحفظ المساحة الآن؟\n\n- سيتم حذف الفواتير الأقدم من 30 يوماً.\n- سيتم حذف السجلات والجلسات الأقدم من 90 يوماً.\n- المنتجات والأقسام والماركات والإعدادات ستبقى دائمة ومحفوظة بنسبة 100% دون مساس.'
+      'هل تؤكدين تشغيل دورة تنظيف وحفظ المساحة الآن؟\n\n- سيتم حذف فواتير المبيعات وإيصالات الكاشير الأقدم من 90 يوماً.\n- سيتم تفريغ وحذف سجلات تتبع النظام والأحداث المؤقتة والجلسات بالكامل (لا تحفظ نهائياً).\n- المنتجات والأقسام والماركات والإعدادات ستبقى دائمة ومحفوظة بنسبة 100% دون مساس.'
     );
     if (!confirmed) return;
 
@@ -37,13 +37,16 @@ export function DataRetentionClient({ initialStatus }: Props) {
             invoices: {
               ...prev.invoices,
               total: Math.max(0, prev.invoices.total - res.deletedInvoices),
+              olderThan90Days: 0,
               olderThan30Days: 0
             },
             systemLogs: {
               ...prev.systemLogs,
               auditLogsTotal: Math.max(0, prev.systemLogs.auditLogsTotal - res.deletedLogs),
               auditLogsOlderThan90Days: 0,
+              auditLogsPrunable: 0,
               rateLimitEventsOlderThan90Days: 0,
+              rateLimitEventsPrunable: 0,
               expiredSessionsTotal: 0
             },
             lastCleanup: {
@@ -67,7 +70,7 @@ export function DataRetentionClient({ initialStatus }: Props) {
     });
   };
 
-  const totalPrunable = status.invoices.olderThan30Days + status.systemLogs.auditLogsOlderThan90Days + status.systemLogs.rateLimitEventsOlderThan90Days + status.systemLogs.expiredSessionsTotal;
+  const totalPrunable = status.invoices.olderThan90Days + status.systemLogs.auditLogsPrunable + status.systemLogs.rateLimitEventsPrunable + status.systemLogs.expiredSessionsTotal;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto" dir="rtl">
@@ -83,7 +86,7 @@ export function DataRetentionClient({ initialStatus }: Props) {
             </h1>
           </div>
           <p className="text-xs text-zinc-500 font-medium leading-relaxed">
-            تنظيم مدة الاحتفاظ بالسجلات لتفادي تجاوز حد الـ 500 ميغابايت المجاني: الفواتير والإيصالات محفوظة لمدة <strong>30 يوماً</strong>، السجلات والعمليات لمدة <strong>90 يوماً</strong>، بينما المنتجات والتصنيفات والبيانات الرئيسية <strong>دائمة ومحمية للأبد</strong>.
+            تنظيم مدة الاحتفاظ بالسجلات لتفادي تجاوز حد الـ 500 ميغابايت المجاني: الفواتير والإيصالات محفوظة لمدة <strong>90 يوماً</strong> لدعم المراجعات والتسويات، السجلات والعمليات المؤقتة <strong>لا تحفظ نهائياً وتفرغ بالكامل</strong>، بينما المنتجات والتصنيفات والبيانات الرئيسية <strong>دائمة ومحمية للأبد بنسبة 100%</strong>.
           </p>
         </div>
 
@@ -160,12 +163,12 @@ export function DataRetentionClient({ initialStatus }: Props) {
                 <FileText className="w-5 h-5" />
               </span>
               <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
-                مدة الاحتفاظ: 30 يوماً
+                مدة الاحتفاظ: 90 يوماً
               </span>
             </div>
             <h3 className="font-black text-sm text-zinc-900">فواتير وإيصالات الكاشير</h3>
             <p className="text-xs text-zinc-500 mt-1">
-              تحفظ فواتير المبيعات وإيصالات الكاشير لمدة 30 يوماً فقط لتفادي تضخم الجداول، ثم يتم تفريغ الفواتير القديمة بعد انتهاء دورة التسوية.
+              تحفظ فواتير المبيعات وإيصالات الكاشير لمدة 90 يوماً لدعم مراجعة الحسابات والتسويات، ثم يتم تفريغ الفواتير القديمة بعد انتهاء دورة التسوية.
             </p>
           </div>
 
@@ -175,9 +178,9 @@ export function DataRetentionClient({ initialStatus }: Props) {
               <strong className="text-zinc-900 font-mono text-base">{status.invoices.total}</strong>
             </div>
             <div className="text-end">
-              <span className="text-zinc-400 block text-[11px]">أقدم من 30 يوماً (جاهزة للحذف)</span>
-              <strong className={`font-mono text-base ${status.invoices.olderThan30Days > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                {status.invoices.olderThan30Days}
+              <span className="text-zinc-400 block text-[11px]">أقدم من 90 يوماً (جاهزة للحذف)</span>
+              <strong className={`font-mono text-base ${status.invoices.olderThan90Days > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {status.invoices.olderThan90Days}
               </strong>
             </div>
           </div>
@@ -192,24 +195,24 @@ export function DataRetentionClient({ initialStatus }: Props) {
                 <Clock className="w-5 h-5" />
               </span>
               <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-900 border border-blue-200">
-                مدة الاحتفاظ: 90 يوماً
+                لا تحفظ نهائياً (تفريغ كامل)
               </span>
             </div>
-            <h3 className="font-black text-sm text-zinc-900">السجلات والعمليات المنتهية</h3>
+            <h3 className="font-black text-sm text-zinc-900">السجلات والعمليات المؤقتة</h3>
             <p className="text-xs text-zinc-500 mt-1">
-              تحفظ سجلات تتبع النظام (Audit Logs)، محاولات تسجيل الدخول، الأحداث، والجلسات المنتهية لمدة 90 يوماً وتفرغ بعدها تلقائياً.
+              سجلات تتبع النظام (Audit Logs)، محاولات تسجيل الدخول، الأحداث المؤقتة، والجلسات المنتهية لا تحفظ نهائياً وتفرغ بالكامل لمنع استهلاك مساحة قاعدة البيانات بالعمليات المؤقتة.
             </p>
           </div>
 
           <div className="mt-6 pt-4 border-t border-zinc-100 flex items-center justify-between text-xs">
             <div>
-              <span className="text-zinc-400 block text-[11px]">إجمالي سجلات التدقيق</span>
+              <span className="text-zinc-400 block text-[11px]">سجلات تتبع النظام الحالية</span>
               <strong className="text-zinc-900 font-mono text-base">{status.systemLogs.auditLogsTotal}</strong>
             </div>
             <div className="text-end">
-              <span className="text-zinc-400 block text-[11px]">أقدم من 90 يوماً (جاهزة للحذف)</span>
-              <strong className={`font-mono text-base ${status.systemLogs.auditLogsOlderThan90Days > 0 ? 'text-blue-600' : 'text-emerald-600'}`}>
-                {status.systemLogs.auditLogsOlderThan90Days}
+              <span className="text-zinc-400 block text-[11px]">جاهزة للتفريغ الفوري</span>
+              <strong className={`font-mono text-base ${status.systemLogs.auditLogsPrunable > 0 ? 'text-blue-600' : 'text-emerald-600'}`}>
+                {status.systemLogs.auditLogsPrunable}
               </strong>
             </div>
           </div>
