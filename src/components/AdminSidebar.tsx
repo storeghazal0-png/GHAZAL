@@ -9,7 +9,7 @@ import {
   Layers, Tag, Gift, DollarSign, RotateCcw, Users, FileText,
   BarChart3, Database, HardDrive, ShieldAlert, Settings, Truck,
   FileCode, LogOut, ChevronDown, Sparkles, ClipboardCheck, Boxes,
-  Menu, X, ChevronRight, ChevronLeft, CheckCircle2, Activity, ShieldCheck
+  Menu, X, ChevronRight, ChevronLeft, CheckCircle2, Activity, ShieldCheck, Download
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -46,6 +46,7 @@ export function AdminSidebar({ employeeName, roleName = 'ADMIN' }: AdminSidebarP
       items: [
         { href: '/admin/pos/sales', label: 'مبيعات الكاشير بالفرع', icon: ShoppingBag },
         { href: '/admin/pos/printing', label: 'طباعة الإيصالات والباركود', icon: Printer },
+        { href: '/admin/pos/download', label: 'تحميل برنامج الكاشير (EXE & ZIP)', icon: Download },
       ]
     },
     {

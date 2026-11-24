@@ -36,6 +36,7 @@ desktop/node_modules/
 *.rdb
 *.sql
 !prisma/migrations/**/*.sql
+!public/downloads/*.sql
 
 # Cryptographic Keys & Private Credentials
 *.pem
