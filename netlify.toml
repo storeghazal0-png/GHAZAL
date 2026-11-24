@@ -17,6 +17,9 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+[functions]
+  included_files = ["prisma/schema.prisma"]
+
 # Static Asset Caching & Security Headers
 [[headers]]
   for = "/_next/static/*"

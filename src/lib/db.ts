@@ -9,52 +9,47 @@ declare global {
 
 const connectionString = (process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_URL)
   ? process.env.TEST_DATABASE_URL
-  : (process.env.DATABASE_URL || '');
+  : (process.env.DATABASE_URL || process.env.DIRECT_URL || '');
 
 const isDev = process.env.NODE_ENV !== 'production';
+const isRemoteDb = Boolean(
+  connectionString && 
+  !connectionString.includes('localhost') && 
+  !connectionString.includes('127.0.0.1')
+);
 
-// إعداد Connection Pool لتحمل أكبر عدد من المستخدمين بنفس الوقت
+// إعداد Connection Pool متوافق مع البيئات السحابية والخوادم اللامركزية (Netlify Serverless)
 const poolConfig = {
   connectionString,
   // الحد الأقصى للاتصالات المتزامنة
-  max: parseInt(process.env.DB_POOL_MAX || '20'),
-  // إغلاق الاتصال الخامل بعد 30 ثانية
-  idleTimeoutMillis: 30000,
-  // الحد الأقصى للانتظار على اتصال جديد (1 ثانية في التطوير و5 ثواني في الإنتاج)
-  connectionTimeoutMillis: isDev ? 1200 : 5000,
-  // الحد الأدنى للاتصالات الجاهزة (0 في التطوير لتفادي أخطاء محاولة الاتصال الخامل بقاعدة غير متصلة)
-  min: isDev ? 0 : 2,
+  max: parseInt(process.env.DB_POOL_MAX || (isDev ? '5' : '10')),
+  // إغلاق الاتصال الخامل بعد 20 ثانية لتوفير موارد الخادم
+  idleTimeoutMillis: 20000,
+  // الحد الأقصى للانتظار على اتصال جديد
+  connectionTimeoutMillis: isDev ? 2000 : 10000,
+  // الحد الأدنى للاتصالات الجاهزة (يجب أن يكون 0 دائماً في بيئات Serverless لمنع انهيار الحاوية عند بدء التشغيل)
+  min: 0,
+  // دعم اتصالات SSL لقواعد بيانات Supabase و Neon في السحابة مع قبول شهادات الـ Pooler
+  ssl: isRemoteDb ? { rejectUnauthorized: false } : undefined,
 };
 
-let pool: Pool;
-let prismaClient: PrismaClient;
-
-if (process.env.NODE_ENV === 'production') {
-  pool = new Pool(poolConfig);
-  pool.on('error', (err) => {
+// تخزين العميل والمجمع عالمياً عبر جميع دورات الاستدعاء السحابية (Serverless Global Caching)
+if (!global.__prismaPool) {
+  global.__prismaPool = new Pool(poolConfig);
+  global.__prismaPool.on('error', (err) => {
     console.error('[DB Pool] Unexpected error on idle client:', err.message);
   });
-  const adapter = new PrismaPg(pool);
-  prismaClient = new PrismaClient({ adapter });
-} else {
-  // In development, strictly cache the client and pool
-  if (!global.__prismaPool) {
-    global.__prismaPool = new Pool(poolConfig);
-    global.__prismaPool.on('error', (err) => {
-      console.error('[DB Pool] Unexpected error on idle client:', err.message);
-    });
-  }
-  pool = global.__prismaPool;
-
-  if (!global.__prismaClient) {
-    const adapter = new PrismaPg(pool);
-    global.__prismaClient = new PrismaClient({
-      adapter,
-      log: ['error', 'warn'],
-    });
-  }
-  prismaClient = global.__prismaClient;
 }
+const pool = global.__prismaPool;
+
+if (!global.__prismaClient) {
+  const adapter = new PrismaPg(pool);
+  global.__prismaClient = new PrismaClient({
+    adapter,
+    log: isDev ? ['error', 'warn'] : ['error'],
+  });
+}
+const prismaClient = global.__prismaClient;
 
 export const prisma = prismaClient;
 export { pool };
