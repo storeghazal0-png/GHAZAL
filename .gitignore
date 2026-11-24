@@ -28,11 +28,9 @@ desktop/node_modules/
 !.env.test.example
 
 # Database Backups & Dumps (NEVER COMMIT DATABASE DUMPS)
-backup/
-**/backup/
-backups/
-**/backups/
-database_backups/
+/backup/
+/backups/
+/database_backups/
 *.dump
 *.bak
 *.rdb
