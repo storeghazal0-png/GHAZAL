@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { 
   Download, 
   FileArchive, 
@@ -10,8 +9,6 @@ import {
   CheckCircle2, 
   Copy, 
   Check, 
-  ExternalLink, 
-  Monitor, 
   HardDrive, 
   ShieldCheck, 
   Printer, 
@@ -56,7 +53,7 @@ export default function AdminPOSDownloadClient({
       <div className="bg-white rounded-2xl p-6 sm:p-8 border border-zinc-200/80 shadow-xs relative overflow-hidden">
         <div className="absolute top-0 left-0 w-96 h-96 bg-rose-500/5 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+        <div className="relative z-10">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
               <Sparkles className="w-3.5 h-3.5" />
@@ -68,18 +65,6 @@ export default function AdminPOSDownloadClient({
             <p className="text-sm text-zinc-600 max-w-2xl leading-relaxed">
               تحميل حزمة التثبيت المتكاملة لنقاط البيع في الفرع: تشمل تطبيق سطح المكتب (Windows EXE)، مخطط قواعد البيانات (SQL)، وملف التشغيل السريع (.bat) لتشغيل الكاشير المستقل وربطه بالمتجر.
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/pos/cashier"
-              target="_blank"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs sm:text-sm font-bold transition border border-zinc-200"
-            >
-              <Monitor className="w-4 h-4 text-rose-600" />
-              <span>فتح كاشير الويب مباشرة</span>
-              <ExternalLink className="w-3 h-3 text-zinc-400" />
-            </Link>
           </div>
         </div>
       </div>
