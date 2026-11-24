@@ -2,8 +2,6 @@
 
 import { requirePermission, requireAuth } from '@/lib/dal';
 import { createClient } from '@supabase/supabase-js';
-import path from 'path';
-import fs from 'fs';
 
 // Dynamic safe loader for sharp to avoid missing libvips shared library errors in serverless runtimes
 async function getSharp() {
@@ -15,14 +13,25 @@ async function getSharp() {
   }
 }
 
-// Setup Supabase admin client to bypass RLS and create buckets if needed
+const BUCKET = 'product-uploads';
+
+// Setup Supabase admin client to bypass RLS
 const getSupabaseAdmin = () => {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-    { auth: { persistSession: false } }
-  );
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) throw new Error('Supabase env vars not configured');
+  return createClient(url, key, { auth: { persistSession: false } });
 };
+
+async function ensureBucket(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  const { data: buckets } = await supabase.storage.listBuckets();
+  if (!buckets?.find(b => b.name === BUCKET)) {
+    await supabase.storage.createBucket(BUCKET, {
+      public: true,
+      fileSizeLimit: 10 * 1024 * 1024,
+    });
+  }
+}
 
 export async function generateUploadUrl(filename: string): Promise<{ success: boolean; token?: string; path?: string; publicUrl?: string; error?: string }> {
   try {
@@ -33,56 +42,40 @@ export async function generateUploadUrl(filename: string): Promise<{ success: bo
     if (lastDot !== -1) {
       ext = filename.substring(lastDot).toLowerCase();
     }
-    
+
     const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm', '.ogg'];
     if (!allowedExts.includes(ext)) {
       return { success: false, error: 'صيغة الملف غير مدعومة' };
     }
 
     const newFilename = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`;
-    const bucketName = 'uploads';
     const supabaseAdmin = getSupabaseAdmin();
+    await ensureBucket(supabaseAdmin);
 
-    // Ensure bucket exists
-    const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
-    if (listError) throw new Error('فشل جلب الحاويات: ' + listError.message);
-    
-    if (!buckets?.find(b => b.name === bucketName)) {
-      const { error: createError } = await supabaseAdmin.storage.createBucket(bucketName, { public: true });
-      if (createError) {
-        throw new Error(`الرجاء إنشاء Bucket باسم '${bucketName}' من لوحة تحكم Supabase وتعيينه كـ Public. فشل الإنشاء التلقائي: ` + createError.message);
-      }
-    }
+    const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUploadUrl(newFilename);
+    if (error || !data) throw new Error(error?.message || 'فشل في إنشاء رابط الرفع');
 
-    // Create a signed upload URL valid for 5 minutes
-    const { data, error } = await supabaseAdmin.storage.from(bucketName).createSignedUploadUrl(newFilename);
+    const { data: publicData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(newFilename);
 
-    if (error || !data) {
-      throw new Error(error?.message || 'فشل في إنشاء رابط الرفع');
-    }
-
-    const { data: publicData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(newFilename);
-
-    return { 
-      success: true, 
+    return {
+      success: true,
       token: data.token,
       path: data.path,
-      publicUrl: publicData.publicUrl 
+      publicUrl: publicData.publicUrl
     };
   } catch (error: any) {
-    console.error('Upload Error:', error);
+    console.error('generateUploadUrl Error:', error);
     return { success: false, error: error.message || 'حدث خطأ' };
   }
 }
 
 /**
- * Handles permanent automatic conversion to .webp for all uploaded images,
- * dramatically optimizing file size, reducing bandwidth and database load.
+ * Server Action: upload a file directly to Supabase Storage.
+ * No local filesystem writes — safe for Netlify and all serverless runtimes.
  */
 export async function uploadMedia(formData: FormData): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
     const session = await requireAuth();
-    // Allow either manage:products or manage:settings
     if (
       !session.permissions?.includes('manage:products') &&
       !session.permissions?.includes('manage:settings') &&
@@ -94,7 +87,8 @@ export async function uploadMedia(formData: FormData): Promise<{ success: boolea
     const file = formData.get('file') as File | null;
     if (!file) return { success: false, error: 'لم يتم العثور على أي ملف' };
 
-    const ext = path.extname(file.name).toLowerCase();
+    const lastDot = file.name.lastIndexOf('.');
+    const ext = lastDot !== -1 ? file.name.substring(lastDot).toLowerCase() : '';
     const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff', '.mp4', '.webm', '.ogg'];
     if (!allowedExts.includes(ext)) {
       return { success: false, error: 'صيغة الملف غير مدعومة' };
@@ -107,8 +101,8 @@ export async function uploadMedia(formData: FormData): Promise<{ success: boolea
     let finalExt = ext;
     let finalContentType = file.type || 'application/octet-stream';
 
-    // Automatic permanent conversion to .webp for optimal compression and fast rendering
-    if (isImage) {
+    // Convert to WebP for optimal size (skip GIF to preserve animation)
+    if (isImage && ext !== '.gif') {
       try {
         const sharpInstance = await getSharp();
         if (sharpInstance) {
@@ -119,45 +113,32 @@ export async function uploadMedia(formData: FormData): Promise<{ success: boolea
           finalContentType = 'image/webp';
         }
       } catch (sharpError) {
-        console.warn('Sharp WebP conversion warning, using original buffer:', sharpError);
+        console.warn('Sharp WebP conversion skipped, using original:', sharpError);
       }
     }
 
     const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${finalExt}`;
+    const supabaseAdmin = getSupabaseAdmin();
+    await ensureBucket(supabaseAdmin);
 
-    // 1. Save to local public/uploads directory for permanent zero-latency serving
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    const localFilePath = path.join(uploadsDir, filename);
-    fs.writeFileSync(localFilePath, finalBuffer);
-    const localUrl = `/uploads/${filename}`;
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .upload(filename, finalBuffer, {
+        contentType: finalContentType,
+        upsert: false,
+        cacheControl: '31536000',
+      });
 
-    // 2. Mirror to Supabase storage if reachable
-    try {
-      const bucketName = 'uploads';
-      const supabaseAdmin = getSupabaseAdmin();
-      const { data: buckets } = await supabaseAdmin.storage.listBuckets();
-      if (buckets?.find(b => b.name === bucketName)) {
-        const { error: uploadError } = await supabaseAdmin.storage.from(bucketName).upload(filename, finalBuffer, {
-          contentType: finalContentType,
-          upsert: true
-        });
-        if (!uploadError) {
-          const { data: publicData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filename);
-          if (publicData?.publicUrl && !publicData.publicUrl.includes('placeholder')) {
-            return { success: true, url: publicData.publicUrl };
-          }
-        }
-      }
-    } catch {
-      // Fallback to local URL cleanly
+    if (uploadError) {
+      console.error('Supabase Storage upload error:', uploadError);
+      return { success: false, error: `فشل رفع الملف: ${uploadError.message}` };
     }
 
-    return { success: true, url: localUrl };
+    const { data: publicData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(uploadData.path);
+    return { success: true, url: publicData.publicUrl };
+
   } catch (error: any) {
-    console.error('Upload Error:', error);
+    console.error('uploadMedia Error:', error);
     return { success: false, error: error.message || 'حدث خطأ أثناء رفع وتحويل الصورة' };
   }
 }
