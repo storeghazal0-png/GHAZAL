@@ -155,13 +155,6 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
       const dayKey = isNaN(d.getTime()) ? 'اليوم' : d.toLocaleDateString('en-GB', { month: '2-digit', day: '2-digit' });
       map.set(dayKey, (map.get(dayKey) || 0) + (s.total || 0));
     }
-    if (map.size < 4) {
-      const days = ['17/11', '18/11', '19/11', '20/11'];
-      const sampleAmounts = [145000, 210000, 185000, Math.max(220000, totalSalesFils)];
-      days.forEach((day, i) => {
-        if (!map.has(day)) map.set(day, sampleAmounts[i]);
-      });
-    }
     return Array.from(map.entries()).map(([day, amountFils]) => ({ day, amountFils }));
   }, [filteredSales, totalSalesFils]);
 
@@ -222,7 +215,7 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
               المملكة الأردنية الهاشمية — لواء عين الباشا (السوق التجاري)
             </p>
             <p className="text-[11px] text-zinc-500">
-              تقرير الأداء والمبيعات وتحليل حركة المنتجات الرسمي • هاتف: 0799991234
+              تقرير الأداء والمبيعات وتحليل حركة المنتجات الرسمي • هاتف: +962776299243
             </p>
           </div>
           <div className="flex flex-col items-center">
@@ -495,7 +488,7 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
 
         {/* Products Table */}
         <div className="overflow-x-auto border border-zinc-200 rounded-2xl">
-          <table className="w-full text-right text-xs">
+          <table className="w-full min-w-[700px] text-right text-xs">
             <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold">
               <tr>
                 <th className="p-3.5 w-12 text-center">#</th>
@@ -657,23 +650,30 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
           </span>
         </div>
 
-        <div className="flex items-end gap-3 sm:gap-6 h-48 pt-6 border-b border-zinc-200">
-          {salesByDay.map((d, idx) => {
-            const heightPercent = Math.max(10, Math.round((d.amountFils / maxDaySalesFils) * 100));
-            return (
-              <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                <span className="text-[10px] font-bold text-zinc-500 opacity-0 group-hover:opacity-100 transition font-mono">
-                  {(d.amountFils / 1000).toFixed(1)} د.أ
-                </span>
-                <div 
-                  className="w-full max-w-[48px] bg-gradient-to-t from-[#E6007E] to-pink-400 rounded-t-xl transition-all duration-500 group-hover:brightness-110 shadow-xs"
-                  style={{ height: `${heightPercent}%` }}
-                />
-                <span className="text-xs font-bold text-zinc-600 font-mono mt-1">{d.day}</span>
-              </div>
-            );
-          })}
-        </div>
+        {salesByDay.length === 0 ? (
+          <div className="h-48 flex flex-col items-center justify-center text-zinc-400 gap-2 border-b border-zinc-200">
+            <span className="text-xs font-bold text-zinc-600">لا توجد حركات مبيعات مسجلة في هذا النطاق الزمني بعد</span>
+            <span className="text-[11px] text-zinc-400">ستظهر المؤشرات والمنحنى البياني فور إتمام عمليات البيع الحقيقية بالكاشير أو المتجر</span>
+          </div>
+        ) : (
+          <div className="flex items-end gap-3 sm:gap-6 h-48 pt-6 border-b border-zinc-200">
+            {salesByDay.map((d, idx) => {
+              const heightPercent = Math.max(10, Math.round((d.amountFils / maxDaySalesFils) * 100));
+              return (
+                <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
+                  <span className="text-[10px] font-bold text-zinc-500 opacity-0 group-hover:opacity-100 transition font-mono">
+                    {(d.amountFils / 1000).toFixed(1)} د.أ
+                  </span>
+                  <div 
+                    className="w-full max-w-[48px] bg-gradient-to-t from-[#E6007E] to-pink-400 rounded-t-xl transition-all duration-500 group-hover:brightness-110 shadow-xs"
+                    style={{ height: `${heightPercent}%` }}
+                  />
+                  <span className="text-xs font-bold text-zinc-600 font-mono mt-1">{d.day}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Report Sub-Tabs */}
@@ -785,8 +785,8 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
 
       {/* Tab 2: Cashiers Performance */}
       {activeReportTab === 'cashiers' && (
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-hidden">
-          <table className="w-full text-xs text-start">
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-x-auto">
+          <table className="w-full min-w-[550px] text-xs text-start">
             <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold">
               <tr>
                 <th className="p-3 text-start">اسم الموظف / الكاشير</th>
@@ -826,7 +826,7 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
             <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
               <span className="font-bold text-xs text-blue-700">متجر غزل الإلكتروني (Online Store)</span>
               <p className="text-xl font-black text-zinc-900 mt-2" dir="ltr">
-                {productAnalytics ? (productAnalytics.totalOnlineUnits * 12.5).toFixed(3) : '460.000'} د.أ
+                {productAnalytics && productAnalytics.allProducts ? (productAnalytics.allProducts.reduce((sum, p) => sum + (p.onlineRevenueFils || 0), 0) / 1000).toFixed(3) : '0.000'} د.أ
               </p>
               <p className="text-[11px] text-zinc-500 mt-1">طلبات الشحن والتوصيل المنزلي المستقلة</p>
             </div>
@@ -836,35 +836,41 @@ export default function AdminReportsClient({ sales, expenses, vouchers, productA
 
       {/* Tab 4: Expenses Breakdown */}
       {activeReportTab === 'expenses' && (
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-hidden">
-          <table className="w-full text-xs text-start">
-            <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold">
-              <tr>
-                <th className="p-3 text-start">بند المصروف</th>
-                <th className="p-3 text-start">المستفيد</th>
-                <th className="p-3 text-start">المبلغ (د.أ)</th>
-                <th className="p-3 text-start">مصدر السداد</th>
-                <th className="p-3 text-start">التاريخ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 font-medium">
-              {expenses.map((e) => (
-                <tr key={e.id} className="hover:bg-zinc-50 transition">
-                  <td className="p-3 font-bold text-[#E6007E]">{e.category}</td>
-                  <td className="p-3 text-zinc-800">{e.beneficiary}</td>
-                  <td className="p-3 font-black text-amber-700" dir="ltr">
-                    {(e.amountFils / 1000).toFixed(3)} د.أ
-                  </td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 bg-zinc-100 rounded text-[10px] font-bold">
-                      {e.paidFromDrawer ? 'من صندوق الكاشير' : 'حساب بنكي'}
-                    </span>
-                  </td>
-                  <td className="p-3 text-zinc-500 font-mono" dir="ltr">{formatJordanDateTime(e.createdAt)}</td>
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-x-auto">
+          {expenses.length === 0 ? (
+            <div className="p-8 text-center text-xs text-zinc-400 font-bold">
+              لا توجد مصاريف تشغيلية مسجلة بعد في النظام
+            </div>
+          ) : (
+            <table className="w-full min-w-[550px] text-xs text-start">
+              <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold">
+                <tr>
+                  <th className="p-3 text-start">بند المصروف</th>
+                  <th className="p-3 text-start">المستفيد</th>
+                  <th className="p-3 text-start">المبلغ (د.أ)</th>
+                  <th className="p-3 text-start">مصدر السداد</th>
+                  <th className="p-3 text-start">التاريخ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 font-medium">
+                {expenses.map((e) => (
+                  <tr key={e.id} className="hover:bg-zinc-50 transition">
+                    <td className="p-3 font-bold text-[#E6007E]">{e.category}</td>
+                    <td className="p-3 text-zinc-800">{e.beneficiary}</td>
+                    <td className="p-3 font-black text-amber-700" dir="ltr">
+                      {(e.amountFils / 1000).toFixed(3)} د.أ
+                    </td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 bg-zinc-100 rounded text-[10px] font-bold">
+                        {e.paidFromDrawer ? 'من صندوق الكاشير' : 'حساب بنكي'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-zinc-500 font-mono" dir="ltr">{formatJordanDateTime(e.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

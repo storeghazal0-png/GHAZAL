@@ -221,42 +221,29 @@ export interface PromotionCouponRecord {
   createdAt: string;
 }
 
-const resilientPromotions: PromotionCouponRecord[] = (globalThis as any).__ghazal_resilient_promotions || [
-  {
-    id: 'promo-01',
-    code: 'GHAZAL10',
-    title: 'خصم ترحيبي 10% لعملاء المتجر والكاشير',
-    channel: 'BOTH',
-    discountType: 'PERCENTAGE',
-    discountValue: 10,
-    maxDiscountFils: 5000, // 5 JOD max
-    minOrderTotalFils: 15000, // minimum 15 JOD
-    startsAt: new Date(Date.now() - 86400000 * 30).toISOString(),
-    endsAt: new Date(Date.now() + 86400000 * 60).toISOString(),
-    usageCount: 42,
-    usageLimit: 500,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'promo-02',
-    code: 'BEAUTY3',
-    title: 'خصم مباشر بقيمة 3 دنانير عند الشراء بأكثر من 20 دينار',
-    channel: 'STOREFRONT',
-    discountType: 'FIXED',
-    discountValue: 3000,
-    minOrderTotalFils: 20000,
-    startsAt: new Date(Date.now() - 86400000 * 10).toISOString(),
-    endsAt: new Date(Date.now() + 86400000 * 20).toISOString(),
-    usageCount: 19,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  }
-];
+const resilientPromotions: PromotionCouponRecord[] = (globalThis as any).__ghazal_resilient_promotions || [];
 (globalThis as any).__ghazal_resilient_promotions = resilientPromotions;
 
-export async function getAllPromotions() {
-  return resilientPromotions;
+export async function getAllPromotions(): Promise<PromotionCouponRecord[]> {
+  try {
+    const setting = await prisma.siteSettings.findUnique({
+      where: { key: 'ghazal_promotions' }
+    });
+    if (setting && setting.value) {
+      try {
+        const parsed = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) {
+          (globalThis as any).__ghazal_resilient_promotions = parsed;
+          return parsed;
+        }
+      } catch (parseErr) {
+        console.warn('Failed to parse ghazal_promotions from DB:', parseErr);
+      }
+    }
+  } catch (err) {
+    console.warn('Database error while fetching promotions:', err);
+  }
+  return (globalThis as any).__ghazal_resilient_promotions || [];
 }
 
 export async function createOrUpdatePromotion(data: {
@@ -279,10 +266,13 @@ export async function createOrUpdatePromotion(data: {
     await requirePermission('manage:products');
     const cleanCode = data.code.trim().toUpperCase();
 
+    // 1. Load current promotions authoritative from DB
+    const currentPromotions = await getAllPromotions();
+
     if (data.id) {
-      const idx = resilientPromotions.findIndex(p => p.id === data.id);
+      const idx = currentPromotions.findIndex(p => p.id === data.id);
       if (idx > -1) {
-        const prevPromo = resilientPromotions[idx];
+        const prevPromo = currentPromotions[idx];
 
         // If target product changed or was deactivated, revert previous product
         if (prevPromo.targetProductId && (prevPromo.targetProductId !== data.targetProductId || !data.isActive)) {
@@ -301,8 +291,8 @@ export async function createOrUpdatePromotion(data: {
           } catch (err) {}
         }
 
-        resilientPromotions[idx] = {
-          ...resilientPromotions[idx],
+        currentPromotions[idx] = {
+          ...currentPromotions[idx],
           code: cleanCode,
           title: data.title,
           targetProductId: data.targetProductId,
@@ -342,16 +332,27 @@ export async function createOrUpdatePromotion(data: {
           } catch (err) {}
         }
 
-        revalidatePath('/admin/promotions');
-        revalidatePath('/[locale]', 'layout');
-        revalidatePath('/[locale]/shop', 'page');
-        revalidatePath('/pos/cashier');
-        return { success: true, promotion: resilientPromotions[idx] };
+        // Persist to PostgreSQL SiteSettings
+        await prisma.siteSettings.upsert({
+          where: { key: 'ghazal_promotions' },
+          update: { value: JSON.stringify(currentPromotions) },
+          create: { key: 'ghazal_promotions', value: JSON.stringify(currentPromotions) }
+        });
+
+        (globalThis as any).__ghazal_resilient_promotions = currentPromotions;
+
+        try {
+          revalidatePath('/admin/promotions');
+          revalidatePath('/[locale]', 'layout');
+          revalidatePath('/[locale]/shop', 'page');
+          revalidatePath('/pos/cashier');
+        } catch {}
+        return { success: true, promotion: currentPromotions[idx] };
       }
     }
 
     const newPromo: PromotionCouponRecord = {
-      id: `promo-${Date.now().toString(36)}`,
+      id: `promo-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       code: cleanCode,
       title: data.title,
       targetProductId: data.targetProductId,
@@ -393,11 +394,22 @@ export async function createOrUpdatePromotion(data: {
       } catch (err) {}
     }
 
-    resilientPromotions.unshift(newPromo);
+    currentPromotions.unshift(newPromo);
 
-    revalidatePath('/admin/promotions');
-    revalidatePath('/[locale]/shop', 'page');
-    revalidatePath('/pos/cashier');
+    // Persist to PostgreSQL SiteSettings
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_promotions' },
+      update: { value: JSON.stringify(currentPromotions) },
+      create: { key: 'ghazal_promotions', value: JSON.stringify(currentPromotions) }
+    });
+
+    (globalThis as any).__ghazal_resilient_promotions = currentPromotions;
+
+    try {
+      revalidatePath('/admin/promotions');
+      revalidatePath('/[locale]/shop', 'page');
+      revalidatePath('/pos/cashier');
+    } catch {}
     return { success: true, promotion: newPromo };
   } catch (error: any) {
     return { success: false, error: error.message || 'فشل حفظ الكوبون' };
@@ -407,12 +419,13 @@ export async function createOrUpdatePromotion(data: {
 export async function deletePromotion(id: string) {
   try {
     await requirePermission('manage:products');
-    const idx = resilientPromotions.findIndex(p => p.id === id);
+    const currentPromotions = await getAllPromotions();
+    const idx = currentPromotions.findIndex(p => p.id === id);
     if (idx === -1) {
       return { success: false, error: 'العرض الترويجي غير موجود' };
     }
 
-    const promo = resilientPromotions[idx];
+    const promo = currentPromotions[idx];
 
     // Revert target product price in COSMETICS_CATALOG if targeted
     if (promo.targetProductId) {
@@ -431,12 +444,23 @@ export async function deletePromotion(id: string) {
       } catch (err) {}
     }
 
-    resilientPromotions.splice(idx, 1);
+    currentPromotions.splice(idx, 1);
 
-    revalidatePath('/admin/promotions');
-    revalidatePath('/[locale]', 'layout');
-    revalidatePath('/[locale]/shop', 'page');
-    revalidatePath('/pos/cashier');
+    // Persist to PostgreSQL SiteSettings
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_promotions' },
+      update: { value: JSON.stringify(currentPromotions) },
+      create: { key: 'ghazal_promotions', value: JSON.stringify(currentPromotions) }
+    });
+
+    (globalThis as any).__ghazal_resilient_promotions = currentPromotions;
+
+    try {
+      revalidatePath('/admin/promotions');
+      revalidatePath('/[locale]', 'layout');
+      revalidatePath('/[locale]/shop', 'page');
+      revalidatePath('/pos/cashier');
+    } catch {}
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message || 'فشل حذف العرض الترويجي' };

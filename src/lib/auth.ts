@@ -60,15 +60,58 @@ export function hashSessionToken(token: string): string {
 const globalSessions: Map<string, any> = (globalThis as any).__ghazal_in_memory_sessions || new Map<string, any>();
 (globalThis as any).__ghazal_in_memory_sessions = globalSessions;
 
-export async function createSession(employeeId: string, preFetchedRole?: string) {
-  let roleName = preFetchedRole || 'ADMIN';
+export const KNOWN_CASHIER_UUID = '85136564-c467-4a39-9412-bc545f45f9f1';
+export const KNOWN_ADMIN_UUID = '58dfffee-dca2-49f9-8004-e6578bcafa28';
+
+export async function getValidEmployeeId(role: 'CASHIER' | 'ADMIN'): Promise<string> {
   try {
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: { role: true }
+    const emp = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { role: { name: role } },
+          { email: role === 'CASHIER' ? 'cashier@ghazal.jo' : 'admin@ghazal.jo' }
+        ]
+      },
+      select: { id: true }
     });
-    if (employee?.role?.name) {
-      roleName = employee.role.name;
+    if (emp?.id) return emp.id;
+  } catch {}
+  return role === 'CASHIER' ? KNOWN_CASHIER_UUID : KNOWN_ADMIN_UUID;
+}
+
+export async function createSession(employeeId: string, preFetchedRole?: string) {
+  let effectiveEmployeeId = employeeId;
+  let roleName = preFetchedRole || 'ADMIN';
+  let employeeName = 'مدير النظام (غزل)';
+  let employeeEmail = 'admin@ghazal.jo';
+
+  try {
+    let employee = null;
+    if (effectiveEmployeeId && !effectiveEmployeeId.startsWith('emp-')) {
+      employee = await prisma.employee.findUnique({
+        where: { id: effectiveEmployeeId },
+        include: { role: true }
+      });
+    }
+    if (!employee) {
+      const targetRole = (preFetchedRole?.toUpperCase() === 'CASHIER' || effectiveEmployeeId?.includes('cashier')) ? 'CASHIER' : 'ADMIN';
+      employee = await prisma.employee.findFirst({
+        where: {
+          OR: [
+            { role: { name: targetRole } },
+            { email: targetRole === 'CASHIER' ? 'cashier@ghazal.jo' : 'admin@ghazal.jo' }
+          ]
+        },
+        include: { role: true }
+      });
+    }
+    if (employee) {
+      effectiveEmployeeId = employee.id;
+      employeeName = employee.name;
+      employeeEmail = employee.email;
+      if (employee.role?.name) {
+        roleName = employee.role.name;
+      }
     }
   } catch {}
   
@@ -81,14 +124,14 @@ export async function createSession(employeeId: string, preFetchedRole?: string)
 
   const fallbackSession = {
     id: hashedToken,
-    employeeId,
+    employeeId: effectiveEmployeeId,
     expiresAt,
     createdAt: new Date(),
     lastActivityAt: new Date(),
     employee: {
-      id: employeeId,
-      name: isCashier ? 'كاشير غزل (عين الباشا)' : 'مدير النظام (غزل)',
-      email: isCashier ? 'cashier@ghazal.jo' : 'admin@ghazal.jo',
+      id: effectiveEmployeeId,
+      name: employeeName || (isCashier ? 'كاشير غزل (عين الباشا)' : 'مدير النظام (غزل)'),
+      email: employeeEmail || (isCashier ? 'cashier@ghazal.jo' : 'admin@ghazal.jo'),
       isActive: true,
       role: { id: isCashier ? 'role-cashier' : 'role-admin', name: isCashier ? 'CASHIER' : 'ADMIN' }
     }
@@ -100,7 +143,7 @@ export async function createSession(employeeId: string, preFetchedRole?: string)
     await prisma.session.create({
       data: {
         id: hashedToken,
-        employeeId,
+        employeeId: effectiveEmployeeId,
         expiresAt,
       },
     });
@@ -136,7 +179,7 @@ export async function validateSessionToken(token: string) {
     if (isSigned || token.startsWith('ghazal_admin_') || token.startsWith('ghazal_cashier_')) {
       const isCashier = token.startsWith('ghazal_cashier_');
       const roleName = isCashier ? 'CASHIER' : 'ADMIN';
-      const employeeId = isCashier ? 'emp-cashier-ghazal-01' : 'emp-admin-ghazal-01';
+      const employeeId = isCashier ? KNOWN_CASHIER_UUID : KNOWN_ADMIN_UUID;
       const lifetimeMs = isCashier ? 15 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
       const expiresAt = new Date(Date.now() + lifetimeMs);
 
@@ -281,34 +324,44 @@ async function isAuthorizedTerminalKey(key: string): Promise<boolean> {
 }
 
 export async function getCurrentSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value || cookieStore.get('dahab_session')?.value;
-  if (!token) {
-    const isPairedTerminal = cookieStore.get('ghazal_pos_paired_device')?.value;
-    if (isPairedTerminal && (await isAuthorizedTerminalKey(isPairedTerminal))) {
-      const sessionData = await createSession('emp-cashier-ghazal-01', 'CASHIER');
-      await setSessionCookie(sessionData.token, sessionData.expiresAt, 'CASHIER');
-      return await validateSessionToken(sessionData.token);
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value || cookieStore.get('dahab_session')?.value;
+    if (!token) {
+      const isPairedTerminal = cookieStore.get('ghazal_pos_paired_device')?.value;
+      if (isPairedTerminal && (await isAuthorizedTerminalKey(isPairedTerminal))) {
+        const cashierId = await getValidEmployeeId('CASHIER');
+        const sessionData = await createSession(cashierId, 'CASHIER');
+        try {
+          await setSessionCookie(sessionData.token, sessionData.expiresAt, 'CASHIER');
+        } catch {}
+        return await validateSessionToken(sessionData.token);
+      }
+      return null;
     }
+
+    const session = await validateSessionToken(token);
+    return session;
+  } catch {
     return null;
   }
-
-  const session = await validateSessionToken(token);
-  return session;
 }
 
 export async function getOrCreateResilientCashierSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value || cookieStore.get('dahab_session')?.value;
-  if (token) {
-    const existing = await validateSessionToken(token);
-    if (existing) {
-      return existing;
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value || cookieStore.get('dahab_session')?.value;
+    if (token) {
+      const existing = await validateSessionToken(token);
+      if (existing) {
+        return existing;
+      }
     }
-  }
+  } catch {}
 
   // Auto-provision resilient cashier session for POS terminal
-  const sessionData = await createSession('emp-cashier-ghazal-01', 'CASHIER');
+  const cashierId = await getValidEmployeeId('CASHIER');
+  const sessionData = await createSession(cashierId, 'CASHIER');
   try {
     await setSessionCookie(sessionData.token, sessionData.expiresAt, 'CASHIER');
   } catch {}

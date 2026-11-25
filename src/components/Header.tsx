@@ -221,11 +221,11 @@ export function Header() {
 
             <div className="p-4 border-t border-zinc-100 bg-[#F2F2F2] space-y-2">
               <a
-                href="tel:0799991234"
+                href="tel:+962776299243"
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs transition"
               >
                 <Phone className="w-4 h-4" />
-                <span>اتصال بمحل عين الباشا - شارع القدس: 0799991234</span>
+                <span>اتصال بمحل عين الباشا: +962776299243</span>
               </a>
 
               <button

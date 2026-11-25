@@ -29,17 +29,15 @@ const AdminDashboardPage = async ({
   let totalOrders = 0;
   let totalProducts = 0;
   let totalSales: any[] = [];
-  let totalBrands = 0;
   let recentSales: any[] = [];
   let recentOrders: any[] = [];
   let dbProductsList: any[] = [];
 
   try {
-    const [dbOrders, dbProducts, dbSales, dbBrands, dbRecentSales, dbRecentOrders, dbProductsData] = await Promise.all([
+    const [dbOrders, dbProducts, dbSales, dbRecentSales, dbRecentOrders, dbProductsData] = await Promise.all([
       prisma.order.count({ where: dateFilter }),
       prisma.product.count(),
       prisma.sale.findMany({ where: dateFilter, select: { total: true } }),
-      prisma.brand.count(),
       prisma.sale.findMany({
         orderBy: { createdAt: 'desc' },
         take: 5,
@@ -56,7 +54,6 @@ const AdminDashboardPage = async ({
     totalOrders = dbOrders;
     totalProducts = dbProducts;
     totalSales = dbSales;
-    totalBrands = dbBrands;
     recentSales = dbRecentSales;
     recentOrders = dbRecentOrders;
     dbProductsList = dbProductsData;
@@ -150,7 +147,7 @@ const AdminDashboardPage = async ({
         </div>
 
         {/* Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 relative overflow-hidden">
             <div className="absolute top-0 right-0 left-0 h-1 bg-[#E6007E]"></div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">إجمالي طلبات المتجر</h3>
@@ -169,12 +166,6 @@ const AdminDashboardPage = async ({
             <p className="text-3xl font-bold text-emerald-600">
               {filsToDisplay(totalSalesRevenue, 'ar')}
             </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 relative overflow-hidden">
-            <div className="absolute top-0 right-0 left-0 h-1 bg-fuchsia-600"></div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">الماركات المعتمدة</h3>
-            <p className="text-3xl font-bold text-zinc-900">{totalBrands}</p>
           </div>
         </div>
 

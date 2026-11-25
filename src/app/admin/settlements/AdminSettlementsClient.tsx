@@ -163,7 +163,6 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
     setData(initialData);
   }, [initialData]);
   const [activeTab, setActiveTab] = useState<TabType>(() => mapQueryParamToTab(initialQueryParam));
-  const [searchProductQuery, setSearchProductQuery] = useState('');
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [settlingOrderId, setSettlingOrderId] = useState<string | null>(null);
 
@@ -1088,17 +1087,6 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
     });
   };
 
-  // Filtered products
-  const filteredProducts = data.inventory.filter((item) => {
-    const q = searchProductQuery.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.brand.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q) ||
-      item.specification.toLowerCase().includes(q)
-    );
-  });
-
   const getActiveTabReportTitle = () => {
     switch (activeTab) {
       case 'cash_sales': return 'كشف مبيعات الكاش وصندوق صالة المعرض (POS)';
@@ -1204,7 +1192,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
                   محل غزل لمستحضرات التجميل والمكياج والعطور
                 </h1>
                 <p className="text-xs font-bold text-black mt-0.5">
-                  الفرع الرئيسي: محافظة البلقاء — لواء عين الباشا — السوق التجاري — هاتف: 0799991234
+                  الفرع الرئيسي: محافظة البلقاء — لواء عين الباشا — السوق التجاري — هاتف: +962776299243
                 </p>
                 <p className="text-[11px] font-bold text-black mt-0.5">
                   السجل التجاري: 284192 / الرقم الضريبي: 0148921
@@ -1285,7 +1273,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
           {/* Quick Step Bar with Prev / Next & Dropdown */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-900 text-white rounded-2xl shadow-sm border border-slate-800">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-300">التنقل السريع بين أقسام التسويات المركزية (6 أقسام):</span>
+              <span className="text-xs font-bold text-slate-300">التنقل السريع بين أقسام التسويات المركزية (7 أقسام):</span>
               <select
                 value={activeTab}
                 onChange={(e) => switchTab(e.target.value as TabType)}
@@ -1324,8 +1312,8 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
             </div>
           </div>
 
-          {/* 6 Large Styled Numbered Tab Pills */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs font-extrabold">
+          {/* 7 Large Styled Numbered Tab Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 text-xs font-extrabold">
             {SETTLEMENT_TABS_LIST.map((t) => {
               const Icon = t.icon;
               const isActive = activeTab === t.id;
@@ -1531,7 +1519,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs print-table">
+                <table className="w-full min-w-[700px] text-right text-xs print-table">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
                       <th className="p-3.5">رقم الإيصال</th>
@@ -1710,7 +1698,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs print-table">
+                <table className="w-full min-w-[700px] text-right text-xs print-table">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
                       <th className="p-3.5">رقم الطلب</th>
@@ -2376,7 +2364,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs print-table">
+                <table className="w-full min-w-[700px] text-right text-xs print-table">
                   <thead className="bg-slate-50 text-slate-700 font-black border-b border-slate-200">
                     <tr>
                       <th className="p-3">رقم واسم الطلبية</th>
@@ -2921,7 +2909,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
 
               return (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-right text-xs print-table">
+                  <table className="w-full min-w-[700px] text-right text-xs print-table">
                     <thead className="bg-slate-50 text-slate-700 font-black border-b border-slate-200">
                       <tr>
                         <th className="p-3.5">رقم السند</th>
@@ -3254,7 +3242,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs print-table">
+                <table className="w-full min-w-[700px] text-right text-xs print-table">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
                       <th className="p-3.5">رقم الفاتورة</th>
@@ -3829,7 +3817,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
                 </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl print:border-black">
-                  <table className="w-full text-right text-xs print-table">
+                  <table className="w-full min-w-[700px] text-right text-xs print-table">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold print:bg-white print:border-black">
                       <tr>
                         <th className="p-3.5">القسم والتصنيف الرئيسي</th>
@@ -4029,7 +4017,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
                   <img src="/logo.png" alt="GHAZAL" className="h-10 mx-auto object-contain mb-1" />
                   <h2 className="font-black text-sm tracking-wider">محل غزل للمكياج والتجميل</h2>
                   <p className="text-[10px] text-slate-600 font-bold">عمان - لواء عين الباشا (السوق التجاري)</p>
-                  <p className="text-[10px] text-slate-600 font-bold">هاتف: 0799991234</p>
+                  <p className="text-[10px] text-slate-600 font-bold">هاتف: +962776299243</p>
                 </div>
 
                 <div className="border-t border-b border-dashed border-slate-400 py-2 space-y-1 text-[10px]">

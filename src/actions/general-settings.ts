@@ -22,8 +22,8 @@ export interface GeneralStoreSettings {
 const defaultSettings: GeneralStoreSettings = {
   storeName: 'محل غزل للمكياج والتجميل والعناية',
   storeBranch: 'عين الباشا — شارع القدس الرئيسي (بجانب دوار الشويحي)',
-  storePhone: '0785050655',
-  storeWhatsApp: '0785050655',
+  storePhone: '+962776299243',
+  storeWhatsApp: '+962776299243',
   commercialRegister: 'CR-884920-BALQA',
   taxNumber: 'TX-309182-JO',
   taxEnabled: false,

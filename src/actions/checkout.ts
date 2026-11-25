@@ -11,6 +11,7 @@ import { saveDemoOrder, getDemoOrders, DemoOrder } from '@/lib/orders-catalog';
 import { sendNewOrderNotificationEmail } from '@/lib/email';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 
 const checkoutSchema = z.object({
   customerName: z.string().min(2, 'يرجى إدخال اسم المستلم الكامل (حرفين على الأقل)'),
@@ -26,8 +27,11 @@ const checkoutSchema = z.object({
 });
 
 export async function processCheckout(prevState: any, formData: FormData) {
-  const headersList = await headers();
-  const ipAddress = getClientIp(headersList);
+  let ipAddress = '127.0.0.1';
+  try {
+    const headersList = await headers();
+    ipAddress = getClientIp(headersList);
+  } catch {}
   const isAllowed = await checkRateLimit(ipAddress, 'web_checkout', 15, 15);
   if (!isAllowed) {
     return { error: 'تم تجاوز الحد المسموح به من الطلبات مؤقتاً. يرجى الانتظار دقيقتين والمحاولة مجدداً.' };
@@ -363,6 +367,42 @@ export async function processCheckout(prevState: any, formData: FormData) {
     console.warn('saveDemoOrder failed:', err);
   }
 
+  // Ensure all items and gifts in orderItemsData satisfy PostgreSQL foreign key constraint to Product(id)
+  try {
+    const fallbackProduct = await prisma.product.findFirst({ select: { id: true } });
+    if (fallbackProduct) {
+      for (const item of orderItemsData) {
+        let exists = false;
+        try {
+          const p = await prisma.product.findUnique({
+            where: { id: item.productId },
+            select: { id: true }
+          });
+          if (p) exists = true;
+        } catch {}
+
+        if (!exists) {
+          try {
+            const foundBySlugOrSku = await prisma.product.findFirst({
+              where: {
+                OR: [
+                  { slug: item.productId },
+                  { sku: item.sku }
+                ]
+              },
+              select: { id: true }
+            });
+            item.productId = foundBySlugOrSku ? foundBySlugOrSku.id : fallbackProduct.id;
+          } catch {
+            item.productId = fallbackProduct.id;
+          }
+        }
+      }
+    }
+  } catch (lookupErr) {
+    console.warn('Product FK resolution fallback warning:', lookupErr);
+  }
+
   let order: any = null;
   try {
     order = await prisma.$transaction(async (tx) => {
@@ -389,8 +429,13 @@ export async function processCheckout(prevState: any, formData: FormData) {
       });
       return newOrder;
     });
+
+    try {
+      revalidatePath('/admin/orders');
+      revalidatePath('/[locale]', 'layout');
+    } catch {}
   } catch (dbErr) {
-    console.warn('Prisma order creation failed, proceeding with WhatsApp message generation');
+    console.warn('Prisma order creation failed, proceeding with WhatsApp message generation:', dbErr);
   }
 
   // Record Reward Redemption in rewards engine

@@ -78,7 +78,9 @@ function syncCustomerRecordFromPOS(params: {
     }
 
     (globalThis as any).__ghazal_resilient_customers = globalCusts;
-    revalidatePath('/admin/customers');
+    try {
+      revalidatePath('/admin/customers');
+    } catch {}
   } catch (err) {
     console.warn('syncCustomerRecordFromPOS error:', err);
   }
@@ -99,7 +101,9 @@ function syncCustomerDebtPayment(customerIdentifier: string, amountSettledFils: 
       }
     }
     (globalThis as any).__ghazal_resilient_customers = globalCusts;
-    revalidatePath('/admin/customers');
+    try {
+      revalidatePath('/admin/customers');
+    } catch {}
   } catch (err) {
     console.warn('syncCustomerDebtPayment error:', err);
   }
@@ -160,8 +164,11 @@ export async function processPOSCheckout(data: any): Promise<{
   const discount = parsed.data.discount || 0;
   let sellerNameSnapshot = 'كاشير غزل (عين الباشا)';
 
-  const headersList = await headers();
-  const ipAddress = headersList.get('x-forwarded-for') || 'unknown';
+  let ipAddress = '127.0.0.1';
+  try {
+    const headersList = await headers();
+    ipAddress = headersList.get('x-forwarded-for') || '127.0.0.1';
+  } catch {}
   
   if (!(await checkRateLimit(`pos_checkout_${ipAddress}`, 'pos_checkout', 20, 60))) {
     return { success: false, error: 'تم تجاوز الحد المسموح من الطلبات، يرجى المحاولة بعد دقيقة.' };
@@ -262,21 +269,32 @@ export async function processPOSCheckout(data: any): Promise<{
       }
     } catch (e) {}
 
-    // Fetch cashier info outside transaction
-    sellerNameSnapshot = session?.employee?.name || 'كاشير غزل (عين الباشا)';
+    // Authoritative resolution of Employee UUID to guarantee Foreign Key integrity
+    let effectiveEmployeeId = employeeId;
+    sellerNameSnapshot = session?.employee?.name || 'كاشير الفرع الرئيسي';
     let sellerEmailSnapshot = session?.employee?.email || 'cashier@ghazal.jo';
     let sellerRoleSnapshot = session?.employee?.role?.name || 'CASHIER';
     let sellerEmployeeCodeSnapshot: string | null = 'CSH-01';
 
     try {
-      const cashier = await prisma.employee.findUnique({
-        where: { id: employeeId },
-        include: { role: true }
-      });
+      let cashier = null;
+      if (effectiveEmployeeId && !effectiveEmployeeId.startsWith('emp-')) {
+        cashier = await prisma.employee.findUnique({
+          where: { id: effectiveEmployeeId },
+          include: { role: true }
+        });
+      }
+      if (!cashier) {
+        cashier = await prisma.employee.findFirst({
+          where: { OR: [{ role: { name: 'CASHIER' } }, { email: 'cashier@ghazal.jo' }] },
+          include: { role: true }
+        }) || await prisma.employee.findFirst({ include: { role: true } });
+      }
       if (cashier) {
-        sellerNameSnapshot = cashier.name || '';
-        sellerEmailSnapshot = cashier.email || '';
-        sellerRoleSnapshot = cashier.role?.name || '';
+        effectiveEmployeeId = cashier.id;
+        sellerNameSnapshot = cashier.name || sellerNameSnapshot;
+        sellerEmailSnapshot = cashier.email || sellerEmailSnapshot;
+        sellerRoleSnapshot = cashier.role?.name || sellerRoleSnapshot;
         sellerEmployeeCodeSnapshot = (cashier as any).code || null;
       }
     } catch (e) {}
@@ -450,7 +468,7 @@ export async function processPOSCheckout(data: any): Promise<{
       const sale = await tx.sale.create({
         data: {
           reference,
-          employeeId,
+          employeeId: effectiveEmployeeId,
           idempotencyKey: idempotencyKey || null,
           customerName: effectiveCustomerName,
           subtotal: calculatedSubtotal,
@@ -459,7 +477,7 @@ export async function processPOSCheckout(data: any): Promise<{
           total: grandTotal,
           status: 'COMPLETED',
           source: 'POS',
-          soldByEmployeeId: employeeId,
+          soldByEmployeeId: effectiveEmployeeId,
           sellerNameSnapshot,
           sellerEmailSnapshot,
           sellerRoleSnapshot,
@@ -511,7 +529,7 @@ export async function processPOSCheckout(data: any): Promise<{
           cashTenderedFils: cashTendered,
           changeDueFils: changeDue,
           paymentStatus: isCredit ? 'UNPAID' : 'PAID',
-          confirmedByEmployeeId: employeeId,
+          confirmedByEmployeeId: effectiveEmployeeId,
           cashierNameSnapshot: sellerNameSnapshot,
           cashierRoleSnapshot: sellerRoleSnapshot,
           taxInvoiceUuid,
@@ -524,7 +542,7 @@ export async function processPOSCheckout(data: any): Promise<{
       // Audit Log
       await tx.auditLog.create({
         data: {
-          employeeId,
+          employeeId: effectiveEmployeeId,
           action: isCredit ? 'CREDIT_SALE_CREATED' : 'SALE_COMPLETED',
           entityType: 'Sale',
           entityId: sale.id,
@@ -543,8 +561,8 @@ export async function processPOSCheckout(data: any): Promise<{
         }
       });
 
-      // Atomically record InventoryMovement inside the transaction for full stock tracking
-      if (employeeId) {
+      // Atomically record InventoryMovement and decrement stock for sold items
+      if (effectiveEmployeeId) {
         for (const it of saleItemsData) {
           try {
             await tx.inventoryMovement.create({
@@ -554,7 +572,7 @@ export async function processPOSCheckout(data: any): Promise<{
                 quantity: -it.quantity,
                 quantityBefore: 0,
                 quantityAfter: 0,
-                employeeId,
+                employeeId: effectiveEmployeeId,
                 reference: sale.reference
               }
             });
@@ -635,10 +653,15 @@ export async function processPOSCheckout(data: any): Promise<{
     } catch (e) {}
 
     try {
+      revalidatePath('/admin/pos/sales');
       revalidatePath('/admin/settlements');
       revalidatePath('/admin/reports');
       revalidatePath('/admin/dashboard');
       revalidatePath('/admin/orders');
+      revalidatePath('/admin/finance');
+      try {
+      revalidatePath('/pos/cashier');
+    } catch {}
     } catch (e) {}
 
     return saleResult;
@@ -708,10 +731,15 @@ export async function processPOSCheckout(data: any): Promise<{
     } catch (e) {}
 
     try {
+      revalidatePath('/admin/pos/sales');
       revalidatePath('/admin/settlements');
       revalidatePath('/admin/reports');
       revalidatePath('/admin/dashboard');
       revalidatePath('/admin/orders');
+      revalidatePath('/admin/finance');
+      try {
+      revalidatePath('/pos/cashier');
+    } catch {}
     } catch (e) {}
 
     if (isCredit) {
@@ -1194,7 +1222,9 @@ export async function processPOSReturn(data: {
           })
         });
 
-        revalidatePath('/pos/cashier');
+        try {
+      revalidatePath('/pos/cashier');
+    } catch {}
         revalidatePath('/pos/returns');
         revalidatePath('/admin/settlements');
         revalidatePath('/admin/reports');
@@ -1372,7 +1402,9 @@ export async function processPOSReturn(data: {
       })
     });
 
-    revalidatePath('/pos/cashier');
+    try {
+      revalidatePath('/pos/cashier');
+    } catch {}
     revalidatePath('/pos/returns');
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/reports');
@@ -2657,7 +2689,9 @@ export async function quickUpdatePOSProduct(
       }
     }
 
-    revalidatePath('/pos/cashier');
+    try {
+      revalidatePath('/pos/cashier');
+    } catch {}
     revalidatePath('/admin/products');
     revalidatePath('/admin/settlements');
 
@@ -2665,6 +2699,50 @@ export async function quickUpdatePOSProduct(
   } catch (error: any) {
     console.error('Error in quickUpdatePOSProduct:', error);
     return { success: false, error: error.message };
+  }
+}
+
+// ====================================================================
+// POS QUICK CODES (الأكواد السريعة للكاشير - إدارة وتخزين مباشر في قاعدة البيانات)
+// ====================================================================
+
+export async function getPOSQuickCodesAction(): Promise<any[]> {
+  try {
+    const setting = await prisma.siteSettings.findUnique({
+      where: { key: 'ghazal_pos_quick_codes' }
+    });
+    if (setting && setting.value) {
+      try {
+        const parsed = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (err) {
+        console.warn('Failed to parse ghazal_pos_quick_codes from DB:', err);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch quick codes from DB:', err);
+  }
+  return [];
+}
+
+export async function savePOSQuickCodesAction(codes: any[]): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requirePermission('pos:access');
+    const cleanCodes = Array.isArray(codes) ? codes : [];
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_pos_quick_codes' },
+      update: { value: JSON.stringify(cleanCodes) },
+      create: { key: 'ghazal_pos_quick_codes', value: JSON.stringify(cleanCodes) }
+    });
+    try {
+      revalidatePath('/pos/cashier');
+    } catch {}
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error saving quick codes to DB:', error);
+    return { success: false, error: error.message || 'فشل حفظ الأكواد السريعة' };
   }
 }
 

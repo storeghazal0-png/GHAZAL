@@ -40,93 +40,65 @@ export interface OperatingExpense {
   createdAt: string;
 }
 
-const resilientVouchers: FinancialVoucher[] = (globalThis as any).__ghazal_resilient_vouchers || [
-  {
-    id: 'vch-001',
-    voucherNumber: 'RC-1001',
-    type: 'RECEIPT',
-    amountFils: 50000, // 50 JOD
-    partyName: 'تحصيل ذمة سابقة - سارة أحمد',
-    reason: 'سداد دفعة من الحساب الآجل السابق',
-    category: 'تحصيل ذمم عملاء',
-    paymentMethod: 'CASH',
-    paidFromDrawer: true,
-    employeeId: 'emp-admin-ghazal-01',
-    employeeName: 'مدير النظام (غزل)',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'vch-002',
-    voucherNumber: 'PV-1002',
-    type: 'PAYMENT',
-    amountFils: 20000, // 20 JOD
-    partyName: 'مؤسسة النظافة والخدمات',
-    reason: 'دفعة مستلزمات تنظيف وخدمات للمحل',
-    category: 'مصاريف تشغيلية',
-    paymentMethod: 'CASH',
-    paidFromDrawer: true,
-    employeeId: 'emp-cashier-ghazal-01',
-    employeeName: 'كاشير غزل (عين الباشا)',
-    createdAt: new Date().toISOString()
-  }
-];
+const resilientVouchers: FinancialVoucher[] = (globalThis as any).__ghazal_resilient_vouchers || [];
 (globalThis as any).__ghazal_resilient_vouchers = resilientVouchers;
 
-const resilientExpenses: OperatingExpense[] = (globalThis as any).__ghazal_resilient_expenses || [
-  {
-    id: 'exp-001',
-    expenseNumber: 'EXP-1001',
-    category: 'مستلزمات وأكياس المحل',
-    amountFils: 35000, // 35 JOD
-    beneficiary: 'مطبعة الأكياس الحديثة',
-    description: 'شراء أكياس هدايا وعلب كرتونية فاخرة لفرع المحل',
-    paymentMethod: 'CASH',
-    paidFromDrawer: true,
-    employeeId: 'emp-admin-ghazal-01',
-    employeeName: 'مدير النظام (غزل)',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'exp-002',
-    expenseNumber: 'EXP-1002',
-    category: 'كهرباء وإنارة',
-    amountFils: 45000, // 45 JOD
-    beneficiary: 'شركة الكهرباء الأردنية',
-    description: 'سداد فاتورة إنارة المحل والمعرض والتكييف',
-    paymentMethod: 'BANK',
-    paidFromDrawer: false,
-    employeeId: 'emp-admin-ghazal-01',
-    employeeName: 'مدير النظام (غزل)',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'exp-003',
-    expenseNumber: 'EXP-1003',
-    category: 'إيجار المعرض',
-    amountFils: 300000, // 300 JOD
-    beneficiary: 'مالك العقار (عين الباشا)',
-    description: 'إيجار فرع صالة المعرض لشهر تشرين الثاني',
-    paymentMethod: 'BANK',
-    paidFromDrawer: false,
-    employeeId: 'emp-admin-ghazal-01',
-    employeeName: 'مدير النظام (غزل)',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'exp-004',
-    expenseNumber: 'EXP-1004',
-    category: 'فواتير المياه والإنترنت',
-    amountFils: 25000, // 25 JOD
-    beneficiary: 'شركة مياهنا وشركة الاتصالات',
-    description: 'سداد فاتورة المياه واشتراك إنترنت الفايبر',
-    paymentMethod: 'BANK',
-    paidFromDrawer: false,
-    employeeId: 'emp-admin-ghazal-01',
-    employeeName: 'مدير النظام (غزل)',
-    createdAt: new Date().toISOString()
-  }
-];
+const resilientExpenses: OperatingExpense[] = (globalThis as any).__ghazal_resilient_expenses || [];
 (globalThis as any).__ghazal_resilient_expenses = resilientExpenses;
+
+async function getVouchersFromDb(): Promise<FinancialVoucher[]> {
+  try {
+    const s = await prisma.siteSettings.findUnique({ where: { key: 'ghazal_financial_vouchers' } });
+    if (s?.value) {
+      const parsed = JSON.parse(s.value);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('Error loading financial vouchers from DB:', err);
+  }
+  return resilientVouchers;
+}
+
+async function saveVouchersToDb(vouchers: FinancialVoucher[]): Promise<void> {
+  try {
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_financial_vouchers' },
+      update: { value: JSON.stringify(vouchers) },
+      create: { key: 'ghazal_financial_vouchers', value: JSON.stringify(vouchers) }
+    });
+  } catch (err) {
+    console.warn('Error saving financial vouchers to DB:', err);
+  }
+  resilientVouchers.length = 0;
+  resilientVouchers.push(...vouchers);
+}
+
+async function getExpensesFromDb(): Promise<OperatingExpense[]> {
+  try {
+    const s = await prisma.siteSettings.findUnique({ where: { key: 'ghazal_operating_expenses' } });
+    if (s?.value) {
+      const parsed = JSON.parse(s.value);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('Error loading operating expenses from DB:', err);
+  }
+  return resilientExpenses;
+}
+
+async function saveExpensesToDb(expenses: OperatingExpense[]): Promise<void> {
+  try {
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_operating_expenses' },
+      update: { value: JSON.stringify(expenses) },
+      create: { key: 'ghazal_operating_expenses', value: JSON.stringify(expenses) }
+    });
+  } catch (err) {
+    console.warn('Error saving operating expenses to DB:', err);
+  }
+  resilientExpenses.length = 0;
+  resilientExpenses.push(...expenses);
+}
 
 // ====================================================================
 // ACTIONS: VOUCHERS (سندات القبض والدفع)
@@ -177,7 +149,9 @@ export async function createFinancialVoucher(data: {
       createdAt: new Date().toISOString()
     };
 
-    resilientVouchers.unshift(newVoucher);
+    const currentVouchers = await getVouchersFromDb();
+    currentVouchers.unshift(newVoucher);
+    await saveVouchersToDb(currentVouchers);
 
     // If paid/deposited from drawer, create single cash movement entry in CashMovement model
     if (data.paidFromDrawer) {
@@ -229,7 +203,8 @@ export async function getAllFinancialVouchers(filters?: {
   search?: string;
 }) {
   try {
-    let list = [...resilientVouchers];
+    const dbVouchers = await getVouchersFromDb();
+    let list = [...dbVouchers];
     if (filters?.type) {
       list = list.filter(v => v.type === filters.type);
     }
@@ -243,7 +218,7 @@ export async function getAllFinancialVouchers(filters?: {
     }
     return list;
   } catch {
-    return resilientVouchers;
+    return [];
   }
 }
 
@@ -293,7 +268,9 @@ export async function createOperatingExpense(data: {
       createdAt: new Date().toISOString()
     };
 
-    resilientExpenses.unshift(newExpense);
+    const currentExpenses = await getExpensesFromDb();
+    currentExpenses.unshift(newExpense);
+    await saveExpensesToDb(currentExpenses);
 
     // If paid from cash drawer, ensure exactly ONE CashMovement is created (Section 7 rule)
     if (data.paidFromDrawer) {
@@ -329,9 +306,11 @@ export async function createOperatingExpense(data: {
       });
     } catch {}
 
-    revalidatePath('/admin/settlements');
-    revalidatePath('/admin/pos/cash');
-    revalidatePath('/pos/cashier');
+    try {
+      revalidatePath('/admin/settlements');
+      revalidatePath('/admin/pos/cash');
+      revalidatePath('/pos/cashier');
+    } catch {}
 
     return { success: true, expense: newExpense };
   } catch (error: any) {
@@ -344,7 +323,8 @@ export async function getAllOperatingExpenses(filters?: {
   search?: string;
 }) {
   try {
-    let list = [...resilientExpenses];
+    const dbExpenses = await getExpensesFromDb();
+    let list = [...dbExpenses];
     if (filters?.category) {
       list = list.filter(e => e.category === filters.category);
     }
@@ -359,7 +339,7 @@ export async function getAllOperatingExpenses(filters?: {
     }
     return list;
   } catch {
-    return resilientExpenses;
+    return [];
   }
 }
 
@@ -396,12 +376,12 @@ export async function getFinancialOverview() {
     };
   } catch {
     return {
-      totalReceiptsFils: 50000,
-      totalPaymentsFils: 20000,
-      totalExpensesFils: 80000,
-      drawerExpensesFils: 35000,
-      vouchersCount: 2,
-      expensesCount: 2
+      totalReceiptsFils: 0,
+      totalPaymentsFils: 0,
+      totalExpensesFils: 0,
+      drawerExpensesFils: 0,
+      vouchersCount: 0,
+      expensesCount: 0
     };
   }
 }

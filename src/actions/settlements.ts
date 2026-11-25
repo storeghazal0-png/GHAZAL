@@ -1418,9 +1418,11 @@ export async function recordPOSSaleGoodsMovements(
       });
     }
 
-    revalidatePath('/admin/settlements');
-    revalidatePath('/admin/reports');
-    revalidatePath('/admin/dashboard');
+    try {
+      revalidatePath('/admin/settlements');
+      revalidatePath('/admin/reports');
+      revalidatePath('/admin/dashboard');
+    } catch {}
   } catch (e) {
     console.warn('Error recording POS sale goods movement:', e);
   }

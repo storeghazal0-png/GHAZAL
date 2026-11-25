@@ -35,7 +35,9 @@ import {
   getPOSSalesHistory,
   recordCashMovement,
   getLivePOSCatalog,
-  quickUpdatePOSProduct
+  quickUpdatePOSProduct,
+  getPOSQuickCodesAction,
+  savePOSQuickCodesAction
 } from '@/actions/pos';
 import { createOperatingExpense, createFinancialVoucher } from '@/actions/finance';
 import { recordCashierDrawerExpense } from '@/actions/settlements';
@@ -247,13 +249,14 @@ export function POSCashierWorkspace({
   const [newQuickColor, setNewQuickColor] = useState('bg-zinc-800 hover:bg-black');
   const [editingQuickCodeIndex, setEditingQuickCodeIndex] = useState<number | null>(null);
 
-  // Mall Fast Scanner Mode state & Shortcodes (Formal Monochrome)
-  const [quickShortcuts, setQuickShortcuts] = useState([
-    { code: '1234', name: 'قسم الدينار', price: 1000, label: '1.000 د.أ', color: 'bg-zinc-800 hover:bg-black text-white' },
-    { code: '2222', name: 'قسم الدينارين', price: 2000, label: '2.000 د.أ', color: 'bg-zinc-800 hover:bg-black text-white' },
-    { code: '3333', name: 'قسم 3 دنانير', price: 3000, label: '3.000 د.أ', color: 'bg-zinc-800 hover:bg-black text-white' },
-    { code: '5555', name: 'قسم 5 دنانير', price: 5000, label: '5.000 د.أ', color: 'bg-zinc-800 hover:bg-black text-white' },
-  ]);
+  // Mall Fast Scanner Mode state & Shortcodes (Loaded directly from Database)
+  const [quickShortcuts, setQuickShortcuts] = useState<{
+    code: string;
+    name: string;
+    price: number;
+    label: string;
+    color: string;
+  }[]>([]);
   const [customPosProducts, setCustomPosProducts] = useState<ProductItem[]>([]);
   const [editingCustomProductId, setEditingCustomProductId] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -327,10 +330,21 @@ export function POSCashierWorkspace({
       if (savedShortcuts) {
         setShortcuts({ ...DEFAULT_SHORTCUTS, ...JSON.parse(savedShortcuts) });
       }
-      const savedCodes = localStorage.getItem('ghazal_pos_quick_codes');
-      if (savedCodes) {
-        setQuickShortcuts(JSON.parse(savedCodes));
-      }
+      // Fetch Authoritative Quick Codes directly from PostgreSQL Database
+      getPOSQuickCodesAction().then(dbCodes => {
+        if (Array.isArray(dbCodes)) {
+          setQuickShortcuts(dbCodes);
+          localStorage.setItem('ghazal_pos_quick_codes', JSON.stringify(dbCodes));
+        }
+      }).catch(err => {
+        console.warn('Failed to load POS quick codes from DB:', err);
+        const savedCodes = localStorage.getItem('ghazal_pos_quick_codes');
+        if (savedCodes) {
+          try {
+            setQuickShortcuts(JSON.parse(savedCodes));
+          } catch {}
+        }
+      });
       const savedSound = localStorage.getItem('ghazal_pos_sound');
       if (savedSound !== null) {
         setSoundEnabled(savedSound === 'true');
@@ -2602,6 +2616,11 @@ export function POSCashierWorkspace({
                 <Zap className="w-3.5 h-3.5 text-zinc-700 fill-current" />
                 <span>أكواد سريعة:</span>
               </span>
+              {quickShortcuts.length === 0 && (
+                <span className="text-[11px] text-zinc-400 font-medium">
+                  لا توجد أكواد سريعة مضافة حالياً.
+                </span>
+              )}
               {quickShortcuts.map((qs) => (
                 <button
                   key={qs.code}
@@ -5000,11 +5019,12 @@ export function POSCashierWorkspace({
                             });
                             setQuickShortcuts(updated);
                             localStorage.setItem('ghazal_pos_quick_codes', JSON.stringify(updated));
+                            savePOSQuickCodesAction(updated).catch(e => console.warn('Failed to persist quick codes:', e));
                             setEditingQuickCodeIndex(null);
                             setNewQuickName('');
                             setNewQuickCode('');
                             setNewQuickPrice('1.000');
-                            showToast('تم تعديل الكود السريع بنجاح');
+                            showToast('تم تعديل الكود السريع وحفظه في قاعدة البيانات');
                           } else {
                             const updated = [
                               ...quickShortcuts,
@@ -5018,10 +5038,11 @@ export function POSCashierWorkspace({
                             ];
                             setQuickShortcuts(updated);
                             localStorage.setItem('ghazal_pos_quick_codes', JSON.stringify(updated));
+                            savePOSQuickCodesAction(updated).catch(e => console.warn('Failed to persist quick codes:', e));
                             setNewQuickName('');
                             setNewQuickCode('');
                             setNewQuickPrice('1.000');
-                            showToast('تمت إضافة الكود السريع بنجاح');
+                            showToast('تمت إضافة الكود السريع وحفظه في قاعدة البيانات');
                           }
                         }}
                         className="bg-black hover:bg-zinc-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs"
@@ -5091,9 +5112,11 @@ export function POSCashierWorkspace({
                               const updated = quickShortcuts.filter((_, idx) => idx !== i);
                               setQuickShortcuts(updated);
                               localStorage.setItem('ghazal_pos_quick_codes', JSON.stringify(updated));
+                              savePOSQuickCodesAction(updated).catch(e => console.warn('Failed to persist quick codes:', e));
                               if (editingQuickCodeIndex === i) {
                                 setEditingQuickCodeIndex(null);
                               }
+                              showToast('تم حذف الكود السريع بنجاح');
                             }}
                             className="text-zinc-400 hover:text-red-600 p-1 rounded transition"
                             title="حذف هذا الكود"
