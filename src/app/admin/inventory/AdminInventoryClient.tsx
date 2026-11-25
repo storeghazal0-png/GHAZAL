@@ -254,7 +254,7 @@ export default function AdminInventoryClient({ initialItems, initialVouchers }: 
               محل غزل للمكياج والتجميل والعناية — GHAZAL
             </h2>
             <p className="text-xs text-slate-700 font-bold">
-              المملكة الأردنية الهاشمية — عين الباشا (شارع القدس) • هاتف: 0785050655
+              المملكة الأردنية الهاشمية — عين الباشا (شارع القدس) • هاتف: +962776299243
             </p>
             <p className="text-[11px] text-slate-600">
               محضر وقوائم الجرد المستودعي الفعلي والمطابقة الدفترية الدورية

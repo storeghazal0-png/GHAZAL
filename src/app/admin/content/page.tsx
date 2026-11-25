@@ -22,7 +22,7 @@ export default async function AdminContentPage() {
 
   const socialLinks = await getCMSContent('social_links', {
     instagram: 'https://instagram.com/ghazal_beauty_jo',
-    whatsapp: 'https://wa.me/962799991234',
+    whatsapp: 'https://wa.me/962776299243',
     facebook: 'https://facebook.com/ghazal.makeup.jo'
   });
 

@@ -2403,7 +2403,10 @@ export async function getPOSSalesHistory(filters?: {
   try {
     await requirePermission('pos:access');
     const take = filters?.take || 60;
-    const where: any = {};
+    const where: any = {
+      source: { not: 'STOREFRONT' },
+      NOT: { reference: { startsWith: 'SALE-ORD-' } }
+    };
 
     if (filters?.employeeId && filters.employeeId !== 'ALL') {
       where.employeeId = filters.employeeId;

@@ -182,7 +182,7 @@ export default function AdminPOSSalesClient({ initialSales, employees }: Props) 
               المملكة الأردنية الهاشمية — عين الباشا (شارع القدس)
             </p>
             <p className="text-[11px] text-zinc-500">
-              هاتف / واتساب: 0785050655 • السجل التجاري والمالي الرسمي
+              هاتف / واتساب: +962776299243 • السجل التجاري والمالي الرسمي
             </p>
           </div>
 

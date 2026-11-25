@@ -468,7 +468,7 @@ export async function deletePromotion(id: string) {
 }
 
 // ====================================================================
-// RESILIENT PRINTING & LABEL SETTINGS (إعدادات الإيصالات والملصقات)
+// RESILIENT & DATABASE-PERSISTED PRINTING & LABEL SETTINGS (إعدادات الإيصالات والملصقات)
 // ====================================================================
 export interface PrintingSettingsRecord {
   receiptPaperWidth: '80mm' | '58mm';
@@ -482,29 +482,60 @@ export interface PrintingSettingsRecord {
   labelShowBrand: boolean;
 }
 
-const resilientPrintingSettings: PrintingSettingsRecord = (globalThis as any).__ghazal_printing_settings || {
+const defaultPrintingSettings: PrintingSettingsRecord = {
   receiptPaperWidth: '80mm',
   showShopLogo: true,
-  receiptHeader: 'غزل للمكياج والتجميل — الفرع الرئيسي • عمّان',
-  receiptFooter: 'شكراً لزيارتكم غزل! البضاعة المسترجعة تخضع لسياسة المحل خلال 3 أيام مع إبراز الإيصال.',
+  receiptHeader: 'محل غزل للمكياج والعناية — عين الباشا (شارع القدس)',
+  receiptFooter: 'شكراً لتسوقكم من محل غزل ❤️\nالبضاعة المباعة تستبدل خلال 3 أيام مع إبراز أصل الفاتورة بحالتها الأصلية.',
   showBarcodeOnReceipt: true,
   labelPaperSize: '50x30mm',
   labelShowPrice: true,
   labelShowShade: true,
   labelShowBrand: true
 };
-(globalThis as any).__ghazal_printing_settings = resilientPrintingSettings;
 
-export async function getPrintingSettings() {
-  return resilientPrintingSettings;
+export async function getPrintingSettings(): Promise<PrintingSettingsRecord> {
+  try {
+    const setting = await prisma.siteSettings.findUnique({
+      where: { key: 'ghazal_printing_settings' }
+    });
+    if (setting?.value) {
+      const parsed = JSON.parse(setting.value);
+      const merged = { ...defaultPrintingSettings, ...parsed };
+      (globalThis as any).__ghazal_printing_settings = merged;
+      return merged;
+    }
+  } catch (err) {
+    console.warn('Prisma getPrintingSettings fallback to memory:', err);
+  }
+  return (globalThis as any).__ghazal_printing_settings || defaultPrintingSettings;
 }
 
 export async function updatePrintingSettings(data: Partial<PrintingSettingsRecord>) {
   try {
     await requirePermission('manage:settings');
-    Object.assign(resilientPrintingSettings, data);
-    revalidatePath('/admin/pos/printing');
-    return { success: true, settings: resilientPrintingSettings };
+    const current = await getPrintingSettings();
+    const updated: PrintingSettingsRecord = { ...current, ...data };
+
+    try {
+      await prisma.siteSettings.upsert({
+        where: { key: 'ghazal_printing_settings' },
+        update: { value: JSON.stringify(updated) },
+        create: { key: 'ghazal_printing_settings', value: JSON.stringify(updated) }
+      });
+    } catch (dbErr) {
+      console.warn('Failed to persist printing settings to DB:', dbErr);
+    }
+
+    (globalThis as any).__ghazal_printing_settings = updated;
+
+    try {
+      revalidatePath('/admin/pos/printing');
+      revalidatePath('/pos/cashier');
+      revalidatePath('/pos', 'layout');
+    } catch {}
+
+    return { success: true, settings: updated };
   } catch (error: any) {
     return { success: false, error: error.message || 'فشل تحديث إعدادات الطباعة' };
   }

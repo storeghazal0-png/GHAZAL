@@ -3,6 +3,7 @@ import { requireAuth, requirePermission, getEmployeePermissions } from '@/lib/da
 import { prisma } from '@/lib/db';
 import { POSCashierWorkspace } from '@/components/POSCashierWorkspace';
 import { getLivePOSCatalog } from '@/actions/pos';
+import { getPrintingSettings } from '@/actions/admin-pos';
 
 export default async function POSCashierPage() {
   // 1. Authorize permission
@@ -32,8 +33,11 @@ export default async function POSCashierPage() {
     console.warn('Prisma employee lookup fallback active');
   }
 
-  // 3. Fetch latest live synchronized POS products
-  const liveCatalogRes = await getLivePOSCatalog();
+  // 3. Fetch latest live synchronized POS products and authoritative printing settings from DB
+  const [liveCatalogRes, printingSettings] = await Promise.all([
+    getLivePOSCatalog(),
+    getPrintingSettings()
+  ]);
   const combinedProducts = liveCatalogRes.products || [];
 
   // 4. Fetch site settings
@@ -109,6 +113,7 @@ export default async function POSCashierPage() {
           pricesIncludeTax,
           ...posSettings
         }}
+        initialPrintingSettings={printingSettings}
         cashierName={employee.name}
         sessionExpiresAt={sessionExpiresAt}
         hasOrdersViewPermission={hasOrdersViewPermission}

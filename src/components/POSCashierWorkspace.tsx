@@ -41,7 +41,7 @@ import {
 } from '@/actions/pos';
 import { createOperatingExpense, createFinancialVoucher } from '@/actions/finance';
 import { recordCashierDrawerExpense } from '@/actions/settlements';
-import { getAllCustomers } from '@/actions/admin-pos';
+import { getAllCustomers, getPrintingSettings, PrintingSettingsRecord } from '@/actions/admin-pos';
 import { getPOSActiveEmployees, switchCashierEmployee } from '@/actions/employees';
 import { verifyUnlockPassword } from '@/actions/auth';
 import ProductMainAccords, { AccordData } from './ProductMainAccords';
@@ -105,6 +105,7 @@ interface POSCashierWorkspaceProps {
     posIdleMessageEn?: string;
     posSessionLifetimeHours?: number;
   };
+  initialPrintingSettings?: PrintingSettingsRecord;
   cashierName: string;
   sessionExpiresAt: string;
   hasOrdersViewPermission?: boolean;
@@ -114,6 +115,7 @@ interface POSCashierWorkspaceProps {
 export function POSCashierWorkspace({
   products,
   settings,
+  initialPrintingSettings,
   cashierName,
   sessionExpiresAt,
   hasOrdersViewPermission = false,
@@ -287,12 +289,23 @@ export function POSCashierWorkspace({
     receiptHeader: string;
     receiptFooter: string;
     showBarcodeOnReceipt: boolean;
-  }>({
-    receiptPaperWidth: '80mm',
-    showShopLogo: true,
-    receiptHeader: 'محل غزل للمكياج والعناية',
-    receiptFooter: 'شكراً لتسوقكم من محل غزل ❤️\nالبضاعة المباعة تستبدل خلال 3 أيام مع إبراز أصل الفاتورة بحالتها الأصلية.',
-    showBarcodeOnReceipt: true
+  }>(() => {
+    if (initialPrintingSettings) {
+      return {
+        receiptPaperWidth: initialPrintingSettings.receiptPaperWidth || '80mm',
+        showShopLogo: initialPrintingSettings.showShopLogo !== false,
+        receiptHeader: initialPrintingSettings.receiptHeader || 'محل غزل للمكياج والعناية — عين الباشا (شارع القدس)',
+        receiptFooter: initialPrintingSettings.receiptFooter || 'شكراً لتسوقكم من محل غزل ❤️\nالبضاعة المباعة تستبدل خلال 3 أيام مع إبراز أصل الفاتورة بحالتها الأصلية.',
+        showBarcodeOnReceipt: initialPrintingSettings.showBarcodeOnReceipt !== false
+      };
+    }
+    return {
+      receiptPaperWidth: '80mm',
+      showShopLogo: true,
+      receiptHeader: 'محل غزل للمكياج والعناية — عين الباشا (شارع القدس)',
+      receiptFooter: 'شكراً لتسوقكم من محل غزل ❤️\nالبضاعة المباعة تستبدل خلال 3 أيام مع إبراز أصل الفاتورة بحالتها الأصلية.',
+      showBarcodeOnReceipt: true
+    };
   });
 
   // 0. Register Service Worker for seamless offline operation (PWA Cache)
@@ -361,11 +374,18 @@ export function POSCashierWorkspace({
       if (savedCashier) {
         setActiveCashierName(savedCashier);
       }
-      const savedPrinting = localStorage.getItem('ghazal_pos_printing_settings');
-      if (savedPrinting) {
+      if (initialPrintingSettings) {
+        setPrintingSettings(prev => ({ ...prev, ...initialPrintingSettings }));
         try {
-          setPrintingSettings(prev => ({ ...prev, ...JSON.parse(savedPrinting) }));
+          localStorage.setItem('ghazal_pos_printing_settings', JSON.stringify(initialPrintingSettings));
         } catch (e) {}
+      } else {
+        const savedPrinting = localStorage.getItem('ghazal_pos_printing_settings');
+        if (savedPrinting) {
+          try {
+            setPrintingSettings(prev => ({ ...prev, ...JSON.parse(savedPrinting) }));
+          } catch (e) {}
+        }
       }
       localStorage.setItem('ghazal_pos_paired_device', 'true');
     } catch (e) {}
@@ -557,20 +577,29 @@ export function POSCashierWorkspace({
     };
   }, [handleSyncOfflineQueue]);
 
-  // Live synchronization with Admin edits (products, prices, visibility)
+  // Live synchronization with Admin edits (products, prices, visibility, and printing settings)
   const refreshCatalogFromAdmin = useCallback(async (silent = false) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     if (!silent) setIsSyncingWithAdmin(true);
     try {
-      const res = await getLivePOSCatalog();
+      const [res, printRes] = await Promise.all([
+        getLivePOSCatalog(),
+        getPrintingSettings().catch(() => null)
+      ]);
       if (res && res.success && Array.isArray(res.products)) {
         setCachedCatalog(res.products);
         try {
           localStorage.setItem('ghazal_pos_cached_catalog', JSON.stringify(res.products));
         } catch (e) {}
-        if (!silent) {
-          showToast('تم تحديث الأصناف والأسعار المتوافقة مع الإدارة بنجاح');
-        }
+      }
+      if (printRes) {
+        setPrintingSettings(prev => ({ ...prev, ...printRes }));
+        try {
+          localStorage.setItem('ghazal_pos_printing_settings', JSON.stringify(printRes));
+        } catch (e) {}
+      }
+      if (!silent) {
+        showToast('تم تحديث الأصناف وإعدادات الطباعة المتوافقة مع الإدارة بنجاح');
       }
     } catch (err) {
       console.error('Error syncing catalog from admin:', err);
@@ -3597,7 +3626,7 @@ export function POSCashierWorkspace({
                 )}
                 <h2 className="font-bold text-sm tracking-wider">{printingSettings.receiptHeader || 'محل غزل للمكياج والعناية'}</h2>
                 <p className="text-[10px] text-zinc-600">عين الباشا - شارع القدس</p>
-                <p className="text-[10px] text-zinc-600">هاتف: <span dir="ltr">07 9999 1234</span></p>
+                <p className="text-[10px] text-zinc-600">هاتف: <span dir="ltr">+962776299243</span></p>
               </div>
 
               {/* Invoice Meta */}

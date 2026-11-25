@@ -2805,7 +2805,7 @@ export function DeliveriesClient({
             <div>
               <h1 className="text-2xl font-black">غزل لمستحضرات التجميل والعناية</h1>
               <p className="text-xs mt-1">GHAZAL Cosmetics &amp; More — الفرع الرئيسي: عين الباشا، شارع القدس</p>
-              <p className="text-xs font-mono">هاتف المعرض: 0799991234</p>
+              <p className="text-xs font-mono">هاتف المعرض: +962776299243</p>
             </div>
             <div className="text-end">
               <span className="text-xs font-bold block">مانفست وكشف استلام شحنات التوصيل</span>

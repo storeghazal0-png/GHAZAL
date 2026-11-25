@@ -221,6 +221,8 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
         return b.date.localeCompare(a.date);
       })
       .filter((sale) => {
+        // Exclude storefront / online sales - only counter/POS cash sales belong here
+        if (sale.receiptNumber?.startsWith('SALE-ORD-') || (sale as any).source === 'STOREFRONT') return false;
         if (cashFilterCashier !== 'ALL' && sale.cashierName !== cashFilterCashier) return false;
         if (cashFilterPaymentMethod !== 'ALL' && !sale.paymentMethod.includes(cashFilterPaymentMethod)) return false;
         if (cashFilterStatus !== 'ALL') {
@@ -1025,10 +1027,6 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const currentTabIndex = SETTLEMENT_TABS_LIST.findIndex(t => t.id === activeTab);
-  const prevTabObj = currentTabIndex > 0 ? SETTLEMENT_TABS_LIST[currentTabIndex - 1] : null;
-  const nextTabObj = currentTabIndex < SETTLEMENT_TABS_LIST.length - 1 ? SETTLEMENT_TABS_LIST[currentTabIndex + 1] : null;
-
   // Professional Print Handler
   const handlePrint = () => {
     const originalTitle = document.title;
@@ -1270,48 +1268,6 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
 
         {/* PRIMARY SECTION TABS (With parameter ?q=xxxxx support & easy navigation) */}
         <div className="print:hidden space-y-3">
-          {/* Quick Step Bar with Prev / Next & Dropdown */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-900 text-white rounded-2xl shadow-sm border border-slate-800">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-300">التنقل السريع بين أقسام التسويات المركزية (7 أقسام):</span>
-              <select
-                value={activeTab}
-                onChange={(e) => switchTab(e.target.value as TabType)}
-                className="bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-black outline-none cursor-pointer hover:bg-slate-700 transition"
-              >
-                {SETTLEMENT_TABS_LIST.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.num}. {t.label} (?q={t.q})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => prevTabObj && switchTab(prevTabObj.id)}
-                disabled={!prevTabObj}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-black flex items-center gap-1.5 cursor-pointer transition border border-slate-700 text-slate-200"
-                title={prevTabObj ? `الانتقال إلى: ${prevTabObj.label}` : 'أنت في القسم الأول'}
-              >
-                <ArrowRight className="w-3.5 h-3.5" />
-                <span>القسم السابق</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => nextTabObj && switchTab(nextTabObj.id)}
-                disabled={!nextTabObj}
-                className="px-3.5 py-1.5 rounded-xl bg-[#E6007E] hover:bg-[#c4006b] disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-xs"
-                title={nextTabObj ? `الانتقال إلى: ${nextTabObj.label}` : 'أنت في القسم الأخير'}
-              >
-                <span>القسم التالي</span>
-                <ArrowLeft className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
           {/* 7 Large Styled Numbered Tab Pills */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 text-xs font-extrabold">
             {SETTLEMENT_TABS_LIST.map((t) => {
@@ -3617,7 +3573,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
                         فرع عين الباشا الرئيسي (شارع القدس التجاري) • المملكة الأردنية الهاشمية
                       </p>
                       <p className="text-[11px] text-slate-500 font-mono mt-0.5" dir="ltr">
-                        Tel: +962 7 9999 1234 • Ref: AUD-JO-2026-081
+                        Tel: +962776299243 • Ref: AUD-JO-2026-081
                       </p>
                     </div>
                   </div>

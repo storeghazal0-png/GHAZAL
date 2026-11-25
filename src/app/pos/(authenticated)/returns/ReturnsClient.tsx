@@ -866,7 +866,7 @@ export function ReturnsClient() {
                   <img src="/logo.png" alt="GHAZAL" className="h-10 mx-auto object-contain mb-1" />
                   <h2 className="font-black text-sm tracking-wider">محل غزل للمكياج والتجميل</h2>
                   <p className="text-[10px] text-slate-600 font-bold">عمان - لواء عين الباشا (السوق التجاري)</p>
-                  <p className="text-[10px] text-slate-600 font-bold">هاتف: 0799991234</p>
+                  <p className="text-[10px] text-slate-600 font-bold">هاتف: +962776299243</p>
                 </div>
 
                 <div className="border-t border-b border-dashed border-slate-400 py-2 space-y-1 text-[10px]">
@@ -994,7 +994,7 @@ export function ReturnsClient() {
                   <img src="/logo.png" alt="GHAZAL" className="h-10 mx-auto object-contain mb-1" />
                   <h2 className="font-black text-sm tracking-wider">محل غزل للمكياج والتجميل</h2>
                   <p className="text-[10px] text-slate-600 font-bold">عمان - لواء عين الباشا (السوق التجاري)</p>
-                  <p className="text-[10px] text-slate-600 font-bold">هاتف: 0799991234</p>
+                  <p className="text-[10px] text-slate-600 font-bold">هاتف: +962776299243</p>
                 </div>
 
                 <div className="border-t border-b border-dashed border-slate-400 py-2 space-y-1 text-[10px]">

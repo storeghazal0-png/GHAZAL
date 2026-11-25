@@ -509,6 +509,10 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
 
   try {
     const dbSales = await prisma.sale.findMany({
+      where: {
+        source: { not: 'STOREFRONT' },
+        NOT: { reference: { startsWith: 'SALE-ORD-' } }
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
       include: {

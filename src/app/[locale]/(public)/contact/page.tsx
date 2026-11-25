@@ -14,12 +14,12 @@ export default async function ContactPage({ params }: { params: Promise<{ locale
     addressEn: 'Hashemite Kingdom of Jordan — Ain Al-Basha - Al-Quds Street',
     hoursAr: 'السبت إلى الخميس: 10:00 صباحاً – 10:00 مساءً | الجمعة: 2:00 ظهراً – 10:00 مساءً',
     hoursEn: 'Saturday – Thursday: 10:00 AM – 10:00 PM | Friday: 2:00 PM – 10:00 PM',
-    phone: '+962 7 9999 1234'
+    phone: '+962776299243'
   });
 
   const socialLinks = await getCMSContent('social_links', {
     instagram: 'https://instagram.com',
-    whatsapp: 'https://wa.me/962799991234',
+    whatsapp: 'https://wa.me/962776299243',
     facebook: 'https://facebook.com',
     tiktok: 'https://tiktok.com'
   });
@@ -27,7 +27,7 @@ export default async function ContactPage({ params }: { params: Promise<{ locale
   // Normalize URLs to ensure safe, direct links even if user enters handles or plain numbers
   const whatsappHref = socialLinks.whatsapp?.startsWith('http')
     ? socialLinks.whatsapp
-    : `https://wa.me/${socialLinks.whatsapp?.replace(/[^0-9]/g, '') || '962799991234'}`;
+    : `https://wa.me/${socialLinks.whatsapp?.replace(/[^0-9]/g, '') || '962776299243'}`;
 
   const instagramHref = socialLinks.instagram?.startsWith('http')
     ? socialLinks.instagram

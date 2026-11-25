@@ -121,8 +121,8 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
             </div>
             <p className="text-sm md:text-base leading-relaxed text-zinc-600 ps-9">
               {isAr
-                ? 'يحق لكِ في أي وقت مراجعة بياناتكِ المسجلة لدينا، تعديلها، أو طلب حذف حسابكِ ورقم هاتفكِ من قوائم الاتصال بمجرد التواصل مع فريق خدمة العملاء في فرع عين الباشا عبر الواتساب على الرقم 07 9999 1234.'
-                : 'You have the right at any time to request review, update, or deletion of your registered data by contacting our Ain Al-Basha team via WhatsApp at 07 9999 1234.'}
+                ? 'يحق لكِ في أي وقت مراجعة بياناتكِ المسجلة لدينا، تعديلها، أو طلب حذف حسابكِ ورقم هاتفكِ من قوائم الاتصال بمجرد التواصل مع فريق خدمة العملاء في فرع عين الباشا عبر الواتساب على الرقم +962776299243.'
+                : 'You have the right at any time to request review, update, or deletion of your registered data by contacting our Ain Al-Basha team via WhatsApp at +962776299243.'}
             </p>
           </section>
         </div>

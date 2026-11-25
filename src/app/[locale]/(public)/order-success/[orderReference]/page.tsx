@@ -26,7 +26,7 @@ export default async function OrderSuccessPage({
   }
 
   // Re-generate WhatsApp URL in case client redirect failed
-  const phoneNumber = '962785050655';
+  const phoneNumber = '962776299243';
   let msg = `مرحباً محل غزل للمكياج والتجميل،\nأود تأكيد طلبي الجديد رقم: ${order.reference}\n\n`;
   msg += `الاسم: ${order.customerName}\n`;
   msg += `رقم الهاتف: ${order.customerPhone}\n\n`;

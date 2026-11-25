@@ -139,7 +139,7 @@ export default async function FAQPage({ params }: { params: Promise<{ locale: st
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
-              href="https://wa.me/962799991234?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%20%D9%85%D8%AD%D9%84%20%D8%BA%D8%B2%D9%84%D8%8C%20%D9%84%D8%AF%D9%8A%20%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1"
+              href="https://wa.me/962776299243?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%20%D9%85%D8%AD%D9%84%20%D8%BA%D8%B2%D9%84%D8%8C%20%D9%84%D8%AF%D9%8A%20%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#25D366] text-white font-bold text-sm hover:bg-[#20ba5a] transition-all shadow-sm"

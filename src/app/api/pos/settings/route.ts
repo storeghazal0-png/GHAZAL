@@ -7,7 +7,7 @@ export async function GET() {
       name: 'محل غزل للمكياج ومستحضرات التجميل',
       brandTitle: 'GHAZAL Cosmetics & More',
       branch: 'عين الباشا - شارع القدس',
-      phone: '+962 7 9999 1234',
+      phone: '+962776299243',
       vatNumber: '100458923',
       currency: 'JOD',
       currencySymbol: 'د.أ',

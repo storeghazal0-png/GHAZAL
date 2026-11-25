@@ -68,32 +68,7 @@ export async function confirmStorefrontOrder(orderId: string) {
       }
       const finalTotal = computedTotal + order.shippingCost;
 
-      // 5. Create Sale record (without payments since it is COD)
-      const sale = await tx.sale.create({
-        data: {
-          reference: `SALE-ORD-${order.reference}`,
-          employeeId,
-          customerName: order.customerName,
-          subtotal: calculatedSubtotal,
-          tax: taxAmount,
-          total: finalTotal,
-          status: 'COMPLETED',
-          source: 'STOREFRONT',
-          items: {
-            create: order.items.map(item => ({
-              variantId: item.variantId,
-              sku: item.sku,
-              name: item.name,
-              size: item.size,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              total: item.total
-            }))
-          }
-        }
-      });
-
-      // 6. Update order status to CONFIRMED and paymentStatus to COD_PENDING
+      // 5. Update order status to CONFIRMED and paymentStatus to COD_PENDING (storefront order remains separate from POS cash sales)
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
         data: { 
@@ -103,11 +78,10 @@ export async function confirmStorefrontOrder(orderId: string) {
         }
       });
 
-      // 7. Create Invoice with snapshots
+      // 6. Create Invoice with snapshots (linked to orderId only, completely separated from POS cashier sales)
       await tx.invoice.create({
         data: {
           orderId: order.id,
-          saleId: sale.id,
           number: `INV-ORD-${order.reference}-${Date.now()}`,
           
           // Unambiguous Financial Snapshots (in Fils)

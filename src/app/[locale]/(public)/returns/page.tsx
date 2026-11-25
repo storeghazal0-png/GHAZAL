@@ -157,7 +157,7 @@ export default async function ReturnsPage({ params }: { params: Promise<{ locale
               </li>
               <li className="flex items-start gap-3">
                 <span className="font-bold text-[#E6007E]">ب.</span>
-                <span>{isAr ? 'مراسلتنا عبر تطبيق واتساب على الرقم 07 9999 1234 موضحةً سبب الاستبدال ورقم الطلب.' : 'Send a WhatsApp message to 07 9999 1234 stating your order number and request reason.'}</span>
+                <span>{isAr ? 'مراسلتنا عبر تطبيق واتساب على الرقم +962776299243 موضحةً سبب الاستبدال ورقم الطلب.' : 'Send a WhatsApp message to +962776299243 stating your order number and request reason.'}</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="font-bold text-[#E6007E]">ج.</span>
@@ -180,7 +180,7 @@ export default async function ReturnsPage({ params }: { params: Promise<{ locale
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
-              href="https://wa.me/962799991234?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D8%A8%D8%A7%D8%B3%D8%AA%D8%A8%D8%AF%D8%A7%D9%84%20%D8%A3%D9%88%20%D8%A7%D8%B3%D8%AA%D8%B1%D8%AC%D8%A7%D8%B9%20%D9%85%D9%86%D8%AA%D8%AC%20%D9%85%D9%86%20%D9%85%D8%AD%D9%84%20%D8%BA%D8%B2%D9%84"
+              href="https://wa.me/962776299243?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D8%A8%D8%A7%D8%B3%D8%AA%D8%A8%D8%AF%D8%A7%D9%84%20%D8%A3%D9%88%20%D8%A7%D8%B3%D8%AA%D8%B1%D8%AC%D8%A7%D8%B9%20%D9%85%D9%86%D8%AA%D8%AC%20%D9%85%D9%86%20%D9%85%D8%AD%D9%84%20%D8%BA%D8%B2%D9%84"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#25D366] text-white font-bold text-sm hover:bg-[#20ba5a] transition-all shadow-md"

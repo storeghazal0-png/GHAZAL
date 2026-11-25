@@ -91,12 +91,14 @@ export async function processCheckout(prevState: any, formData: FormData) {
     }
 
     if (existing) {
-      let number = '962785050655';
+      let number = '962776299243';
       try {
         const setting = await prisma.siteSettings.findUnique({ where: { key: 'whatsapp_number' } });
         if (setting) {
           const config = JSON.parse(setting.value);
-          if (config.number) number = config.number;
+          if (config.number && !config.number.includes('785050655') && !config.number.includes('99991234')) {
+            number = config.number;
+          }
         }
       } catch (e) {}
       
@@ -482,12 +484,14 @@ export async function processCheckout(prevState: any, formData: FormData) {
   });
 
   // Get WhatsApp official number from database setting or default
-  let whatsappNumber = '962785050655';
+  let whatsappNumber = '962776299243';
   try {
     const setting = await prisma.siteSettings.findUnique({ where: { key: 'whatsapp_number' } });
     if (setting) {
       const config = JSON.parse(setting.value);
-      if (config.number) whatsappNumber = config.number;
+      if (config.number && !config.number.includes('785050655') && !config.number.includes('99991234')) {
+        whatsappNumber = config.number;
+      }
     }
   } catch (e) {}
 
