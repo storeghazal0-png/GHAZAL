@@ -171,14 +171,7 @@ export function ProductShowcase({
             {productName}
           </h1>
 
-          {/* Rating (Compact) */}
-          <div className="flex items-center gap-1.5 mb-3">
-            <div className="flex text-amber-400 text-xs">
-              {'★'.repeat(5)}
-            </div>
-            <span className="text-[11px] font-bold text-zinc-700">4.9</span>
-            <span className="text-[11px] text-zinc-400">({product.reviewsCount || 240} {isAr ? 'تقييم موثق' : 'reviews'})</span>
-          </div>
+
 
           {/* Price Banner - Clean Numbers Before & After */}
           <div className="mb-4 p-3 rounded-xl bg-pink-50/40 border border-pink-200/80">

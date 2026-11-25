@@ -29,6 +29,8 @@ import {
   deleteOperatingExpenseAction
 } from '@/actions/settlements';
 import { jodToFils } from '@/lib/money';
+import AdminReportsClient from '@/app/admin/reports/AdminReportsClient';
+import { ProductSalesAnalyticsResult } from '@/actions/product-reports';
 import {
   DollarSign,
   ShoppingBag,
@@ -42,6 +44,7 @@ import {
   Boxes,
   Database,
   TrendingUp,
+  BarChart3,
   RotateCcw,
   Clock,
   Landmark,
@@ -107,9 +110,15 @@ interface Props {
   };
   currentUserRole: string;
   initialQueryParam?: string;
+  reportsData?: {
+    sales: any[];
+    expenses: any[];
+    vouchers: any[];
+    productAnalytics?: ProductSalesAnalyticsResult;
+  };
 }
 
-type TabType = 'cash_sales' | 'online_sales' | 'delivery' | 'cash_expenses' | 'invoices' | 'pnl';
+type TabType = 'cash_sales' | 'online_sales' | 'delivery' | 'cash_expenses' | 'invoices' | 'pnl' | 'reports';
 
 function mapQueryParamToTab(q?: string): TabType {
   if (!q) return 'cash_sales';
@@ -119,7 +128,8 @@ function mapQueryParamToTab(q?: string): TabType {
   if (['3', 'delivery', 'courier', 'courier-settlements', 'deliveries'].includes(clean)) return 'delivery';
   if (['4', 'expense', 'expenses', 'cash-expenses', 'cash_expenses'].includes(clean)) return 'cash_expenses';
   if (['5', 'invoices', 'invoice', 'inv', 'receipts', 'bills'].includes(clean)) return 'invoices';
-  if (['6', 'pnl', 'profit', 'finance', 'financial-summary', 'reports'].includes(clean)) return 'pnl';
+  if (['6', 'pnl', 'profit', 'finance', 'financial-summary'].includes(clean)) return 'pnl';
+  if (['7', 'reports', 'report', 'analytics', 'stats', 'product-reports'].includes(clean)) return 'reports';
   return 'cash_sales';
 }
 
@@ -131,6 +141,7 @@ function mapTabToQueryParam(tab: TabType): string {
     case 'cash_expenses': return 'cash-expenses';
     case 'invoices': return 'invoices';
     case 'pnl': return 'financial-summary';
+    case 'reports': return 'reports';
     default: return 'cash-sales';
   }
 }
@@ -142,9 +153,10 @@ const SETTLEMENT_TABS_LIST: { id: TabType; q: string; num: string; label: string
   { id: 'cash_expenses', q: 'cash-expenses', num: '4', label: 'المصروفات وفواتير المحل (إيجار/كهرباء/فواتير)', icon: Receipt },
   { id: 'invoices', q: 'invoices', num: '5', label: 'سجل الفواتير وسندات البيع', icon: FileText },
   { id: 'pnl', q: 'financial-summary', num: '6', label: 'ملخص الأرباح والتقرير المالي', icon: TrendingUp },
+  { id: 'reports', q: 'reports', num: '7', label: 'التقارير المالية والتحليلات', icon: BarChart3 },
 ];
 
-export default function AdminSettlementsClient({ initialData, currentUserRole, initialQueryParam }: Props) {
+export default function AdminSettlementsClient({ initialData, currentUserRole, initialQueryParam, reportsData }: Props) {
   const [data, setData] = useState(initialData);
 
   useEffect(() => {
@@ -1095,6 +1107,7 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
       case 'cash_expenses': return 'كشف المصروفات النقدية المسحوبة من صندوق الكاشير';
       case 'invoices': return 'سجل الفواتير المركزية وسندات البيع المعتمدة';
       case 'pnl': return 'كشف الأرباح والتقرير المالي الرسمي التفصيلي';
+      case 'reports': return 'التقارير المالية والتحليلات البيعية';
       default: return 'كشف مالي رسمي';
     }
   };
@@ -1158,16 +1171,8 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
               </div>
             </div>
 
-            {/* Actions: Retention & Print Buttons */}
+            {/* Actions: Print Button */}
             <div className="flex items-center gap-2">
-              <Link
-                href="/admin/system/retention"
-                className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition border border-zinc-200"
-                title="سياسة حفظ البيانات والخطة المجانية: الفواتير 30 يوماً، السجلات 90 يوماً"
-              >
-                <Database className="w-4 h-4 text-[#E6007E]" />
-                <span>حفظ البيانات (90/30 يوم)</span>
-              </Link>
               <button
                 type="button"
                 onClick={handlePrint}
@@ -3970,6 +3975,20 @@ export default function AdminSettlementsClient({ initialData, currentUserRole, i
             </div>
           );
         })()}
+
+        {/* ============================================================ */}
+        {/* TAB 7: FINANCIAL REPORTS & ANALYTICS (التقارير المالية والتحليلات) */}
+        {/* ============================================================ */}
+        {activeTab === 'reports' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <AdminReportsClient
+              sales={reportsData?.sales || []}
+              expenses={reportsData?.expenses || []}
+              vouchers={reportsData?.vouchers || []}
+              productAnalytics={reportsData?.productAnalytics}
+            />
+          </div>
+        )}
 
         {/* OFFICIAL PRINT FOOTER & AUDIT SIGNATURES */}
         <div className="hidden print:grid print:grid-cols-3 print:gap-8 print:mt-12 print:pt-6 border-t-2 border-black text-center text-xs font-black text-black">

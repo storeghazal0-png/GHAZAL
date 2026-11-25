@@ -193,10 +193,6 @@ export function DashboardAnalyticsSection({ initialStats }: Props) {
                   <p className="text-[11px] text-zinc-400">منتجات تحتاج عروض ترويجية أو إعادة تسعير</p>
                 </div>
               </div>
-              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                <span>تنبيه مخزون</span>
-              </span>
             </div>
 
             <div className="divide-y divide-zinc-100">
@@ -233,6 +229,12 @@ export function DashboardAnalyticsSection({ initialStats }: Props) {
                   </div>
                 );
               })}
+
+              {sortedLeast.length === 0 && (
+                <p className="text-zinc-400 py-8 text-center text-sm">
+                  لا توجد منتجات مسجلة في قاعدة البيانات حالياً.
+                </p>
+              )}
             </div>
           </div>
 

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/dal';
 import { revalidatePath } from 'next/cache';
 import { JORDAN_GOVERNORATES_SHIPPING_ZONES } from '@/lib/shipping-zones';
-import { getCourierCompaniesAction, setDefaultCourierCompanyAction } from '@/actions/settlements';
+import { getCourierCompaniesAction } from '@/actions/settlements';
 
 export interface ShippingZoneItem {
   id: string;
@@ -20,34 +20,11 @@ const BASE_JORDAN_GOVERNORATES: ShippingZoneItem[] = JORDAN_GOVERNORATES_SHIPPIN
   id: z.id,
   nameAr: z.nameAr,
   nameEn: z.nameEn,
-  fee: z.fee,
-  cost: z.cost || 2000,
+  fee: z.fee ?? 2000,
+  cost: z.cost ?? 2000,
   estimatedDeliveryTime: z.estimatedDeliveryTime || 'خلال 2 - 3 أيام عمل',
   isEnabled: z.isEnabled
 }));
-
-// Initialize company-specific rates in global memory so they persist across requests
-if (!(globalThis as any).__ghazal_company_shipping_rates) {
-  (globalThis as any).__ghazal_company_shipping_rates = {
-    'comp-1': BASE_JORDAN_GOVERNORATES.map(z => ({
-      ...z,
-      fee: z.id === 'zone-amman' ? 2000 : z.id === 'zone-zarqa' ? 2500 : 3000,
-      cost: z.id === 'zone-amman' ? 1500 : z.id === 'zone-zarqa' ? 1800 : 2200,
-    })),
-    'comp-2': BASE_JORDAN_GOVERNORATES.map(z => ({
-      ...z,
-      fee: z.id === 'zone-amman' ? 2500 : z.id === 'zone-zarqa' ? 3000 : 3500,
-      cost: z.id === 'zone-amman' ? 2000 : z.id === 'zone-zarqa' ? 2400 : 2800,
-    })),
-    'comp-3': BASE_JORDAN_GOVERNORATES.map(z => ({
-      ...z,
-      fee: z.id === 'zone-balqa' ? 1500 : z.id === 'zone-amman' ? 2000 : 2500,
-      cost: z.id === 'zone-balqa' ? 1000 : z.id === 'zone-amman' ? 1400 : 1800,
-    })),
-  };
-}
-
-let memoryShippingZones: ShippingZoneItem[] = BASE_JORDAN_GOVERNORATES;
 
 async function resolveDefaultCompanyId(): Promise<string> {
   if ((globalThis as any).__ghazal_default_courier_id) {
@@ -61,7 +38,36 @@ async function resolveDefaultCompanyId(): Promise<string> {
       return def.id;
     }
   } catch {}
-  return 'comp-1';
+  return 'comp-shibli';
+}
+
+async function getCompanyShippingRatesFromDb(): Promise<Record<string, ShippingZoneItem[]>> {
+  try {
+    const setting = await prisma.siteSettings.findUnique({
+      where: { key: 'ghazal_company_shipping_rates' }
+    });
+    if (setting?.value) {
+      return JSON.parse(setting.value);
+    }
+  } catch (err) {
+    console.warn('Error reading ghazal_company_shipping_rates from DB:', err);
+  }
+  return {
+    'comp-shibli': BASE_JORDAN_GOVERNORATES.map(z => ({ ...z, fee: 2000, cost: 2000 }))
+  };
+}
+
+async function saveCompanyShippingRatesToDb(rates: Record<string, ShippingZoneItem[]>): Promise<void> {
+  try {
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_company_shipping_rates' },
+      update: { value: JSON.stringify(rates) },
+      create: { key: 'ghazal_company_shipping_rates', value: JSON.stringify(rates) }
+    });
+  } catch (err) {
+    console.warn('Error saving ghazal_company_shipping_rates to DB:', err);
+  }
+  (globalThis as any).__ghazal_company_shipping_rates = rates;
 }
 
 export async function initializeShippingZones() {
@@ -74,7 +80,8 @@ export async function initializeShippingZones() {
           data: {
             nameAr: gov.nameAr,
             nameEn: gov.nameEn,
-            fee: gov.fee,
+            fee: 2000,
+            cost: 2000,
             estimatedDeliveryTime: gov.estimatedDeliveryTime || 'خلال 2 - 3 أيام عمل',
             isEnabled: true
           }
@@ -82,17 +89,22 @@ export async function initializeShippingZones() {
       }
     }
   } catch (e) {
-    console.warn('initializeShippingZones memory fallback active');
+    console.warn('initializeShippingZones error:', e);
   }
 }
 
 export async function getShippingZonesForCompany(companyId?: string): Promise<ShippingZoneItem[]> {
   const targetId = companyId || await resolveDefaultCompanyId();
-  const ratesMap = (globalThis as any).__ghazal_company_shipping_rates || {};
-  if (!ratesMap[targetId]) {
-    ratesMap[targetId] = BASE_JORDAN_GOVERNORATES.map(z => ({ ...z }));
+  const ratesMap = await getCompanyShippingRatesFromDb();
+  if (ratesMap[targetId]) {
+    return ratesMap[targetId];
   }
-  return ratesMap[targetId];
+
+  // Fallback to DB shippingZone table
+  const dbZones = await getShippingZonesList();
+  ratesMap[targetId] = dbZones;
+  await saveCompanyShippingRatesToDb(ratesMap);
+  return dbZones;
 }
 
 export async function getAllCompanyShippingZonesAction(): Promise<{
@@ -100,7 +112,7 @@ export async function getAllCompanyShippingZonesAction(): Promise<{
   rates: Record<string, ShippingZoneItem[]>;
 }> {
   const defaultCompanyId = await resolveDefaultCompanyId();
-  const ratesMap = (globalThis as any).__ghazal_company_shipping_rates || {};
+  const ratesMap = await getCompanyShippingRatesFromDb();
   return {
     defaultCompanyId,
     rates: ratesMap
@@ -109,35 +121,25 @@ export async function getAllCompanyShippingZonesAction(): Promise<{
 
 export async function getShippingZonesList(): Promise<ShippingZoneItem[]> {
   try {
-    const defaultId = await resolveDefaultCompanyId();
-    const companyZones = await getShippingZonesForCompany(defaultId);
-    if (companyZones && companyZones.length > 0) {
-      return companyZones;
-    }
-  } catch {}
-
-  try {
     const dbZones = await prisma.shippingZone.findMany({
-      orderBy: { fee: 'asc' }
+      orderBy: { nameAr: 'asc' }
     });
     if (dbZones && dbZones.length > 0) {
-      return dbZones.map((z: any) => {
-        const mem = memoryShippingZones.find(m => m.id === z.id);
-        const ref = BASE_JORDAN_GOVERNORATES.find(j => j.id === z.id);
-        return {
-          id: z.id,
-          nameAr: ref?.nameAr || (z.nameAr ? z.nameAr.split('(')[0].trim() : z.nameAr),
-          nameEn: ref?.nameEn || (z.nameEn ? z.nameEn.split('(')[0].trim() : z.nameEn),
-          fee: z.fee || 2000,
-          cost: mem?.cost || 2000,
-          estimatedDeliveryTime: z.estimatedDeliveryTime || 'خلال 2 - 3 أيام عمل',
-          isEnabled: z.isEnabled
-        };
-      });
+      return dbZones.map((z: any) => ({
+        id: z.id,
+        nameAr: z.nameAr,
+        nameEn: z.nameEn,
+        fee: z.fee ?? 2000,
+        cost: z.cost ?? 2000,
+        estimatedDeliveryTime: z.estimatedDeliveryTime || 'خلال 2 - 3 أيام عمل',
+        isEnabled: z.isEnabled
+      }));
     }
-  } catch {}
+  } catch (err) {
+    console.warn('getShippingZonesList error:', err);
+  }
 
-  return memoryShippingZones;
+  return BASE_JORDAN_GOVERNORATES;
 }
 
 export async function updateShippingZone(
@@ -148,7 +150,7 @@ export async function updateShippingZone(
   await requirePermission('manage:settings');
   
   const targetCompanyId = companyId || await resolveDefaultCompanyId();
-  const ratesMap = (globalThis as any).__ghazal_company_shipping_rates || {};
+  const ratesMap = await getCompanyShippingRatesFromDb();
 
   if (!ratesMap[targetCompanyId]) {
     ratesMap[targetCompanyId] = BASE_JORDAN_GOVERNORATES.map(z => ({ ...z }));
@@ -156,38 +158,30 @@ export async function updateShippingZone(
 
   const zones = ratesMap[targetCompanyId];
   const idx = zones.findIndex((z: ShippingZoneItem) => z.id === id);
+  const cost = data.cost !== undefined ? data.cost : 2000;
   if (idx > -1) {
     zones[idx] = {
       ...zones[idx],
       fee: data.fee,
-      cost: data.cost !== undefined ? data.cost : zones[idx].cost,
+      cost,
       isEnabled: data.isEnabled
     };
   }
 
-  const defaultId = await resolveDefaultCompanyId();
-  if (targetCompanyId === defaultId) {
-    const memIdx = memoryShippingZones.findIndex(z => z.id === id);
-    if (memIdx > -1) {
-      memoryShippingZones[memIdx] = {
-        ...memoryShippingZones[memIdx],
-        fee: data.fee,
-        cost: data.cost !== undefined ? data.cost : memoryShippingZones[memIdx].cost,
-        isEnabled: data.isEnabled
-      };
-    }
+  await saveCompanyShippingRatesToDb(ratesMap);
 
-    try {
-      await prisma.shippingZone.update({
-        where: { id },
-        data: {
-          fee: data.fee,
-          isEnabled: data.isEnabled
-        }
-      });
-    } catch (err) {
-      console.warn('Prisma updateShippingZone fallback applied in memory');
-    }
+  // Update in database table
+  try {
+    await prisma.shippingZone.update({
+      where: { id },
+      data: {
+        fee: data.fee,
+        cost: cost,
+        isEnabled: data.isEnabled
+      }
+    });
+  } catch (err) {
+    console.warn('Prisma updateShippingZone error:', err);
   }
   
   revalidatePath('/admin/settings/shipping');

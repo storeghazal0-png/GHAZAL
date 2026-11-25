@@ -330,26 +330,73 @@ export async function updateProduct(productId: string, formData: FormData) {
         }
       });
 
-      // Upsert variants: delete all and re-create for simplicity
+      // Safe variant update/reconciliation: avoid cascade FK deletions on SaleItem
       if (variants.length > 0) {
-        await prisma.productVariant.deleteMany({ where: { productId } });
-        await prisma.productVariant.createMany({
-          data: variants.map((v: any) => ({
-            productId,
+        const existingVariants = await prisma.productVariant.findMany({
+          where: { productId },
+          include: { saleItems: { select: { id: true }, take: 1 } },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        const updatedVariantIds = new Set<string>();
+
+        for (let idx = 0; idx < variants.length; idx++) {
+          const v = variants[idx];
+          const existing = (v.id ? existingVariants.find(ev => ev.id === v.id) : null) || existingVariants[idx];
+
+          const variantData = {
             size: v.size || 'Standard',
             shade: v.shade || null,
             colorName: v.colorName || null,
             colorHex: v.colorHex || null,
             imageUrl: v.imageUrl || null,
             barcode: v.barcode || null,
-            sku: v.sku,
+            sku: v.sku || (existing?.sku || `${sku}-${(idx + 1).toString().padStart(2, '0')}`),
             price: Number(v.price),
             costPrice: v.costPrice ? Number(v.costPrice) : Math.round(Number(v.price) * 0.55),
             compareAt: v.compareAt ? Number(v.compareAt) : null,
             isActive: v.isActive ?? true,
             usesGlobalPricing: v.usesGlobalPricing ?? true,
-          }))
-        });
+          };
+
+          if (existing) {
+            await prisma.productVariant.update({
+              where: { id: existing.id },
+              data: variantData
+            });
+            updatedVariantIds.add(existing.id);
+          } else {
+            const created = await prisma.productVariant.create({
+              data: {
+                productId,
+                ...variantData
+              }
+            });
+            updatedVariantIds.add(created.id);
+          }
+        }
+
+        // Handle leftover variants (e.g. when converted from multiple variants to single simple variant)
+        const leftoverVariants = existingVariants.filter(ev => !updatedVariantIds.has(ev.id));
+        for (const leftover of leftoverVariants) {
+          if (leftover.saleItems.length > 0) {
+            // Cannot delete because it is referenced in sale receipts: safely deactivate it
+            await prisma.productVariant.update({
+              where: { id: leftover.id },
+              data: { isActive: false, shade: null, colorName: null }
+            });
+          } else {
+            // Safe to delete unused variant
+            try {
+              await prisma.productVariant.delete({ where: { id: leftover.id } });
+            } catch {
+              await prisma.productVariant.update({
+                where: { id: leftover.id },
+                data: { isActive: false }
+              });
+            }
+          }
+        }
       }
 
       // Update accords: delete all and re-create

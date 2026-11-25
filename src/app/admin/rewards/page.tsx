@@ -2,7 +2,6 @@ import React from 'react';
 import { requireAuth } from '@/lib/dal';
 import { AdminSidebar } from '@/components/AdminSidebar';
 import { prisma } from '@/lib/db';
-import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { getRewardsDashboardDataAction } from '@/actions/rewards';
 import AdminRewardsClient from './AdminRewardsClient';
 
@@ -18,40 +17,30 @@ export default async function AdminRewardsPage({
 
   const dashboardData = await getRewardsDashboardDataAction(period);
 
-  // Load available catalog products with images, stock & prices for gift picker
+  // Load available catalog products from database for gift picker
   let products: any[] = [];
   try {
     const dbProds = await prisma.product.findMany({
       include: {
-        images: { where: { isMain: true }, take: 1 },
+        images: { orderBy: { isMain: 'desc' }, take: 1 },
         variants: true
       },
       take: 200,
       orderBy: { nameAr: 'asc' }
     });
     if (dbProds && dbProds.length > 0) {
-      products = dbProds.map(p => ({
+      products = dbProds.map((p: any) => ({
         id: p.id,
         nameAr: p.nameAr,
         sku: p.sku,
-        imageUrl: p.images[0]?.url || '/product-placeholder.png',
-        price: p.variants[0]?.price || 15000,
-        costPrice: Math.round((p.variants[0]?.price || 15000) * 0.55),
-        stock: p.variants.reduce((acc, v: any) => acc + (v.stock || 12), 0)
+        imageUrl: p.images?.[0]?.url || '/product-placeholder.png',
+        price: p.variants?.[0]?.price || 0,
+        costPrice: Math.round((p.variants?.[0]?.price || 0) * 0.55),
+        stock: (p.variants || []).reduce((acc: number, v: any) => acc + (v.stock || 0), 0)
       }));
     }
-  } catch {}
-
-  if (products.length === 0) {
-    products = COSMETICS_CATALOG.map(p => ({
-      id: p.id,
-      nameAr: p.nameAr,
-      sku: p.sku,
-      imageUrl: p.images[0]?.url || '/product-placeholder.png',
-      price: p.variants[0]?.price || p.priceFils,
-      costPrice: Math.round((p.variants[0]?.price || p.priceFils) * 0.55),
-      stock: p.variants.reduce((acc, v: any) => acc + (v.stock || 15), 0)
-    }));
+  } catch (err) {
+    console.warn('Could not load products for rewards gift picker:', err);
   }
 
   return (

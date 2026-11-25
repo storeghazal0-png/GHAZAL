@@ -181,14 +181,17 @@ export function ProductEditForm({
     if (type === 'NONE') {
       setVariants([
         {
+          id: variants[0]?.id || '',
           size: 'Standard',
           shade: '',
           colorName: '',
           colorHex: '',
           imageUrl: variants[0]?.imageUrl || '',
           barcode: variants[0]?.barcode || '',
-          sku: `${initialData.sku}-STD`,
+          sku: variants[0]?.sku || `${initialData.sku}-STD`,
           price: variants[0]?.price || 15000,
+          costPrice: variants[0]?.costPrice || 0,
+          compareAt: variants[0]?.compareAt || undefined,
           isActive: true
         }
       ]);
@@ -290,6 +293,7 @@ export function ProductEditForm({
       const formData = new FormData(e.currentTarget);
 
       const variantsForAction = variants.map((v, idx) => ({
+        id: (v as any).id || undefined,
         size: variantType === 'SIZE' ? (v.size || 'Standard') : 'Standard',
         shade: variantType === 'SHADE' ? (v.shade || null) : null,
         colorName: variantType === 'SHADE' ? (v.colorName || null) : (variantType === 'SCENT' ? (v.colorName || null) : null),
@@ -358,34 +362,22 @@ export function ProductEditForm({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-zinc-700 mb-1.5">SKU الأساسي *</label>
-            <input
-              type="text"
-              name="sku"
-              readOnly
-              value={initialData.sku}
-              className="w-full border border-zinc-200 rounded-xl px-3.5 py-2 text-sm outline-none bg-zinc-50 font-mono text-zinc-500 cursor-not-allowed"
-              dir="ltr"
-            />
-          </div>
+        <input type="hidden" name="sku" value={initialData.sku} />
 
-          <div>
-            <label className="block text-xs font-bold text-zinc-700 mb-1.5">التصنيف / القسم *</label>
-            <select
-              name="categoryId"
-              defaultValue={initialData.categoryId || (categories[0]?.id ?? '')}
-              required
-              className="w-full border border-zinc-300 rounded-xl px-3.5 py-2 text-sm outline-none bg-white focus:border-[#E6007E]"
-            >
+        <div>
+          <label className="block text-xs font-bold text-zinc-700 mb-1.5">التصنيف / القسم *</label>
+          <select
+            name="categoryId"
+            defaultValue={initialData.categoryId || (categories[0]?.id ?? '')}
+            required
+            className="w-full border border-zinc-300 rounded-xl px-3.5 py-2 text-sm outline-none bg-white focus:border-[#E6007E]"
+          >
               <option value="">-- اختر التصنيف --</option>
               {categories.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
-        </div>
 
         <div>
           <label className="block text-xs font-bold text-zinc-700 mb-1.5">
@@ -698,54 +690,49 @@ export function ProductEditForm({
                   )}
                 </div>
 
-                {/* Price (in Fils / JOD), Cost Price & CompareAt (Offer) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">سعر البيع الحالي (فلس / د.أ) *</label>
+                {/* Price (in Fils / JOD) & Cost Price */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-white p-3.5 rounded-xl border-2 border-zinc-300 focus-within:!border-[#E6007E] focus-within:ring-2 focus-within:ring-[#E6007E]/20 transition-all shadow-xs">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-black text-zinc-900">سعر البيع الحالي (فلس / د.أ) *</label>
+                      <span className="text-xs font-bold text-[#E6007E] bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100 font-mono">
+                        = {(v.price / 1000).toFixed(3)} د.أ
+                      </span>
+                    </div>
                     <input
                       type="number"
                       value={v.price}
                       onChange={e => updateVariant(i, 'price', parseInt(e.target.value) || 0)}
                       required
-                      placeholder="15000"
-                      className="w-full border border-zinc-300 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-[#E6007E] bg-white text-zinc-900"
+                      placeholder="5000"
+                      className="w-full h-11 border border-zinc-300 rounded-lg px-3 py-2 text-base font-black font-mono outline-none focus:border-[#E6007E] bg-zinc-50/50 focus:bg-white text-zinc-900 transition"
                       dir="ltr"
                     />
-                    <span className="text-[10px] text-zinc-500 block mt-0.5 font-mono">
-                      = {(v.price / 1000).toFixed(3)} د.أ
+                    <span className="text-[11px] text-zinc-500 block mt-1.5 font-bold">
+                      سعر البيع المعتمد للزبائن
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-amber-800 mb-1">سعر التكلفة علينا (فلس / د.أ)</label>
+                  <div className="bg-amber-50/30 p-3.5 rounded-xl border-2 border-amber-300 focus-within:!border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all shadow-xs">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-black text-amber-900">سعر التكلفة علينا (فلس / د.أ)</label>
+                      <span className="text-xs font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300 font-mono">
+                        = {((v.costPrice !== undefined ? v.costPrice : Math.round(v.price * 0.55)) / 1000).toFixed(3)} د.أ
+                      </span>
+                    </div>
                     <input
                       type="number"
                       value={v.costPrice !== undefined ? v.costPrice : Math.round(v.price * 0.55)}
                       onChange={e => updateVariant(i, 'costPrice', parseInt(e.target.value) || 0)}
-                      placeholder="8500"
-                      className="w-full border border-amber-300 bg-amber-50/30 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-amber-500 text-zinc-900"
+                      placeholder="2750"
+                      className="w-full h-11 border border-amber-300 bg-white rounded-lg px-3 py-2 text-base font-black font-mono outline-none focus:border-amber-500 text-zinc-900 transition"
                       dir="ltr"
                     />
-                    <span className="text-[10px] text-amber-700 block mt-0.5 font-mono font-bold">
-                      = {((v.costPrice !== undefined ? v.costPrice : Math.round(v.price * 0.55)) / 1000).toFixed(3)} د.أ
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-rose-700 mb-1">السعر الأصلي قبل الخصم (فلس للعروض)</label>
-                    <input
-                      type="number"
-                      value={v.compareAt ? v.compareAt : ''}
-                      onChange={e => updateVariant(i, 'compareAt', e.target.value ? parseInt(e.target.value) : 0)}
-                      placeholder="مثال: 18000"
-                      className="w-full border border-rose-300 bg-rose-50/40 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-rose-500 text-zinc-900"
-                      dir="ltr"
-                    />
-                    <span className="text-[10px] text-rose-600 block mt-0.5 font-bold font-mono">
-                      {v.compareAt && v.compareAt > v.price ? (
-                        `خصم -${Math.round(((v.compareAt - v.price) / v.compareAt) * 100)}% (وفر ${((v.compareAt - v.price) / 1000).toFixed(3)} د.أ)`
+                    <span className="text-[11px] text-amber-800 block mt-1.5 font-bold">
+                      {v.price && v.costPrice !== undefined && v.price > v.costPrice ? (
+                        `هامش ربح تقريبي: +${((v.price - v.costPrice) / 1000).toFixed(3)} د.أ`
                       ) : (
-                        'اتركه فارغاً إذا لم يكن عليه عرض'
+                        'تكلفة الشراء والتوريد للقطعة'
                       )}
                     </span>
                   </div>
@@ -892,18 +879,11 @@ export function ProductEditForm({
         </div>
       </div>
 
+      {/* Hidden visibility state preserving current setting without checkbox */}
+      <input type="hidden" name="isVisible" value={initialData.isVisible ? "true" : "false"} />
+
       {/* Visibility */}
       <div className="flex flex-col sm:flex-row gap-4 border-t border-zinc-100 pt-4">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            name="isVisible"
-            value="true"
-            defaultChecked={initialData.isVisible}
-            className="w-4 h-4 rounded text-[#E6007E] focus:ring-[#E6007E]"
-          />
-          <span className="text-xs font-bold text-zinc-800">متاح للبيع في المتجر والكاشير POS</span>
-        </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"

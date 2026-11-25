@@ -5,7 +5,6 @@ import { AdminSidebar } from '@/components/AdminSidebar';
 import { filsToDisplay } from '@/lib/money';
 import Link from 'next/link';
 import { DashboardAnalyticsSection, ProductSaleStat } from './DashboardAnalyticsSection';
-import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 
 const AdminDashboardPage = async ({
   searchParams,
@@ -28,14 +27,15 @@ const AdminDashboardPage = async ({
 
   // Query actual metrics from DB
   let totalOrders = 0;
-  let totalProducts = 10;
+  let totalProducts = 0;
   let totalSales: any[] = [];
-  let totalBrands = 6;
+  let totalBrands = 0;
   let recentSales: any[] = [];
   let recentOrders: any[] = [];
+  let dbProductsList: any[] = [];
 
   try {
-    const [dbOrders, dbProducts, dbSales, dbBrands, dbRecentSales, dbRecentOrders] = await Promise.all([
+    const [dbOrders, dbProducts, dbSales, dbBrands, dbRecentSales, dbRecentOrders, dbProductsData] = await Promise.all([
       prisma.order.count({ where: dateFilter }),
       prisma.product.count(),
       prisma.sale.findMany({ where: dateFilter, select: { total: true } }),
@@ -48,16 +48,20 @@ const AdminDashboardPage = async ({
       prisma.order.findMany({
         orderBy: { createdAt: 'desc' },
         take: 5
+      }),
+      prisma.product.findMany({
+        include: { brand: true, category: true, variants: true }
       })
     ]);
     totalOrders = dbOrders;
-    totalProducts = dbProducts || 10;
+    totalProducts = dbProducts;
     totalSales = dbSales;
-    totalBrands = dbBrands || 6;
+    totalBrands = dbBrands;
     recentSales = dbRecentSales;
     recentOrders = dbRecentOrders;
+    dbProductsList = dbProductsData;
   } catch (err) {
-    console.warn('Prisma dashboard metrics skipped or offline, using fallback data');
+    console.warn('Prisma dashboard metrics skipped or offline:', err);
   }
 
   const totalSalesRevenue = totalSales.reduce((acc, s) => acc + s.total, 0);
@@ -94,177 +98,29 @@ const AdminDashboardPage = async ({
     console.warn('Prisma analytics fetch skipped or offline:', err);
   }
 
-  // Baseline verified analytics for GHAZAL Cosmetics products
-  const sampleAnalytics: ProductSaleStat[] = [
-    {
-      id: 'ghaz-prod-1',
-      name: 'أحمر شفاه مايبيلين سوبر ستاي فينيل إنك',
-      brand: 'MAYBELLINE',
-      category: 'المكياج',
-      priceFils: 12000,
-      posQty: 56,
-      posRevenueFils: 672000,
-      onlineQty: 28,
-      onlineRevenueFils: 336000,
-      totalQty: 84,
-      totalRevenueFils: 1008000,
-    },
-    {
-      id: 'ghaz-prod-2',
-      name: 'كريم أساس لوريال إنفاليبل 24 ساعة مات كفر',
-      brand: "L'ORÉAL PARIS",
-      category: 'المكياج',
-      priceFils: 16500,
-      posQty: 41,
-      posRevenueFils: 676500,
-      onlineQty: 24,
-      onlineRevenueFils: 396000,
-      totalQty: 65,
-      totalRevenueFils: 1072500,
-    },
-    {
-      id: 'pos-quick-1',
-      name: 'مستحضرات قسم الدينار (كود 1234 السريع)',
-      brand: 'قسم الدينار',
-      category: 'إكسسوارات وعناية',
-      priceFils: 1000,
-      posQty: 142,
-      posRevenueFils: 142000,
-      onlineQty: 0,
-      onlineRevenueFils: 0,
-      totalQty: 142,
-      totalRevenueFils: 142000,
-    },
-    {
-      id: 'ghaz-prod-5',
-      name: 'سيروم النياسيناميد 10% والزنك 1% من ذا أورديناري',
-      brand: 'THE ORDINARY',
-      category: 'العناية بالبشرة',
-      priceFils: 8500,
-      posQty: 30,
-      posRevenueFils: 255000,
-      onlineQty: 28,
-      onlineRevenueFils: 238000,
-      totalQty: 58,
-      totalRevenueFils: 493000,
-    },
-    {
-      id: 'ghaz-prod-4',
-      name: 'مرطب الشفاه الليلي بالتوت من لانيج',
-      brand: 'LANEIGE',
-      category: 'العناية بالبشرة',
-      priceFils: 18000,
-      posQty: 19,
-      posRevenueFils: 342000,
-      onlineQty: 25,
-      onlineRevenueFils: 450000,
-      totalQty: 44,
-      totalRevenueFils: 792000,
-    },
-    {
-      id: 'ghaz-prod-6',
-      name: 'غسول الوجه المرطب للبشرة الجافة من سيرافي',
-      brand: 'CERAVE',
-      category: 'العناية بالبشرة',
-      priceFils: 11500,
-      posQty: 22,
-      posRevenueFils: 253000,
-      onlineQty: 14,
-      onlineRevenueFils: 161000,
-      totalQty: 36,
-      totalRevenueFils: 414000,
-    },
-    {
-      id: 'ghaz-prod-7',
-      name: 'ماسك زيت الأرغان لإصلاح وترميم الشعر',
-      brand: 'GHAZAL CARE',
-      category: 'العناية بالشعر',
-      priceFils: 14000,
-      posQty: 18,
-      posRevenueFils: 252000,
-      onlineQty: 9,
-      onlineRevenueFils: 126000,
-      totalQty: 27,
-      totalRevenueFils: 378000,
-    },
-    {
-      id: 'ghaz-prod-9',
-      name: 'طقم إسفنجات دمج المكياج الاحترافية (4 قطع)',
-      brand: 'GHAZAL TOOLS',
-      category: 'أدوات التجميل',
-      priceFils: 6000,
-      posQty: 12,
-      posRevenueFils: 72000,
-      onlineQty: 6,
-      onlineRevenueFils: 36000,
-      totalQty: 18,
-      totalRevenueFils: 108000,
-    },
-    {
-      id: 'ghaz-prod-10',
-      name: 'حقيبة مكياج مخملية فاخرة لحمل المستحضرات',
-      brand: 'GHAZAL ACCESSORIES',
-      category: 'الإكسسوارات',
-      priceFils: 7500,
-      posQty: 3,
-      posRevenueFils: 22500,
-      onlineQty: 1,
-      onlineRevenueFils: 7500,
-      totalQty: 4,
-      totalRevenueFils: 30000,
-    },
-    {
-      id: 'ghaz-prod-3',
-      name: 'باليت ظلال عيون ألتيميت شادو من نيكْس',
-      brand: 'NYX MAKEUP',
-      category: 'المكياج',
-      priceFils: 19000,
-      posQty: 2,
-      posRevenueFils: 38000,
-      onlineQty: 1,
-      onlineRevenueFils: 19000,
-      totalQty: 3,
-      totalRevenueFils: 57000,
-    },
-    {
-      id: 'ghaz-prod-8',
-      name: 'عطر غزل سيجنتشر المركز 100 مل',
-      brand: 'GHAZAL PERFUMES',
-      category: 'العطور',
-      priceFils: 35000,
-      posQty: 4,
-      posRevenueFils: 140000,
-      onlineQty: 1,
-      onlineRevenueFils: 35000,
-      totalQty: 5,
-      totalRevenueFils: 175000,
-    }
-  ];
+  // Calculate product sales statistics purely from DB products and real sales
+  const productStats: ProductSaleStat[] = dbProductsList.map((p) => {
+    const pSaleItems = saleItems.filter(si => si.sku === p.sku || (si.name && p.nameAr && si.name.includes(p.nameAr)));
+    const pOrderItems = orderItems.filter(oi => oi.sku === p.sku || (oi.name && p.nameAr && oi.name.includes(p.nameAr)));
+    const posQty = pSaleItems.reduce((acc, it) => acc + (it.quantity || 0), 0);
+    const posRevenueFils = pSaleItems.reduce((acc, it) => acc + (it.total || (it.unitPrice || 0) * (it.quantity || 0)), 0);
+    const onlineQty = pOrderItems.reduce((acc, it) => acc + (it.quantity || 0), 0);
+    const onlineRevenueFils = pOrderItems.reduce((acc, it) => acc + (it.total || (it.unitPrice || 0) * (it.quantity || 0)), 0);
 
-  const productStats = saleItems.length > 0 || orderItems.length > 0
-    ? COSMETICS_CATALOG.map(p => {
-        const pSaleItems = saleItems.filter(si => si.sku === p.sku || si.name.includes(p.nameAr));
-        const pOrderItems = orderItems.filter(oi => oi.sku === p.sku || oi.name.includes(p.nameAr));
-        const posQty = pSaleItems.reduce((acc, it) => acc + it.quantity, 0);
-        const posRevenueFils = pSaleItems.reduce((acc, it) => acc + (it.total || it.unitPrice * it.quantity), 0);
-        const onlineQty = pOrderItems.reduce((acc, it) => acc + it.quantity, 0);
-        const onlineRevenueFils = pOrderItems.reduce((acc, it) => acc + (it.total || it.unitPrice * it.quantity), 0);
-
-        return {
-          id: p.id,
-          name: p.nameAr,
-          brand: p.brandName,
-          category: p.categoryName,
-          priceFils: p.priceFils,
-          posQty,
-          posRevenueFils,
-          onlineQty,
-          onlineRevenueFils,
-          totalQty: posQty + onlineQty,
-          totalRevenueFils: posRevenueFils + onlineRevenueFils,
-        };
-      })
-    : sampleAnalytics;
+    return {
+      id: p.id,
+      name: p.nameAr,
+      brand: p.brand?.nameAr || p.brand?.nameEn || 'غزل',
+      category: p.category?.nameAr || p.category?.nameEn || 'مستحضرات',
+      priceFils: p.basePrice || p.variants?.[0]?.price || 0,
+      posQty,
+      posRevenueFils,
+      onlineQty,
+      onlineRevenueFils,
+      totalQty: posQty + onlineQty,
+      totalRevenueFils: posRevenueFils + onlineRevenueFils,
+    };
+  });
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#FAFAFA] overflow-hidden" dir="rtl">
@@ -366,7 +222,7 @@ const AdminDashboardPage = async ({
                 <div key={sale.id} className="py-3 flex justify-between items-center">
                   <div>
                     <span className="font-bold text-zinc-900 font-mono text-sm">{sale.reference || sale.id.substring(0, 8)}</span>
-                    <p className="text-xs text-zinc-500">الكاشير: {sale.employee.name} • {sale.items.length} قطع</p>
+                    <p className="text-xs text-zinc-500">الكاشير: {sale.employee?.name || 'كاشير'} • {sale.items?.length || 0} قطع</p>
                   </div>
                   <div className="text-left">
                     <span className="text-sm font-bold text-emerald-600">

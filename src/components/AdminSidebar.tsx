@@ -70,18 +70,15 @@ export function AdminSidebar({ employeeName, roleName = 'ADMIN' }: AdminSidebarP
       title: 'المالية والتسويات',
       items: [
         { href: '/admin/settlements', label: 'التسويات والجرد والفواتير المركزية', icon: ClipboardCheck },
-        { href: '/admin/reports', label: 'التقارير المالية والتحليلات', icon: BarChart3 },
+        { href: '/admin/settlements?tab=reports', label: 'التقارير المالية والتحليلات', icon: BarChart3 },
       ]
     },
     {
       title: 'إدارة النظام والمتجر',
       items: [
         { href: '/admin/employees', label: 'الموظفون والصلاحيات', icon: Users },
-        { href: '/admin/deliveries?tab=shipping-zones', label: 'أسعار التوصيل بالمحافظات', icon: Truck },
         { href: '/admin/content', label: 'إدارة واجهة المتجر (CMS)', icon: FileCode },
-        { href: '/admin/settings/backups', label: 'النسخ الاحتياطي وحماية البيانات (Neon DR)', icon: ShieldCheck },
-        { href: '/admin/system-health', label: 'مركز صحة النظام والمزامنة والنسخ الاحتياطي', icon: Activity },
-        { href: '/admin/system/retention', label: 'حفظ البيانات ومساحة التخزين (90/30 يوم)', icon: Database },
+        { href: '/admin/system', label: 'صحة النظام والنسخ الاحتياطي والبيانات', icon: Activity },
       ]
     }
   ];
@@ -193,7 +190,18 @@ export function AdminSidebar({ employeeName, roleName = 'ADMIN' }: AdminSidebarP
               )}
               {sec.items.map((link) => {
                 const Icon = link.icon;
-                const isActive = pathname === link.href || (link.href !== '/admin/dashboard' && pathname.startsWith(link.href + '/'));
+                const [targetPath, targetQuery] = link.href.split('?');
+                let isActive = false;
+                if (targetQuery) {
+                  isActive = pathname === targetPath && typeof window !== 'undefined' && window.location.search.includes(targetQuery);
+                } else if (link.href === '/admin/settlements') {
+                  const isReports = typeof window !== 'undefined' && window.location.search.includes('reports');
+                  isActive = pathname === '/admin/settlements' && !isReports;
+                } else if (link.href === '/admin/system') {
+                  isActive = pathname === '/admin/system' || pathname.startsWith('/admin/system') || pathname === '/admin/system-health' || pathname === '/admin/settings/backups';
+                } else {
+                  isActive = pathname === link.href || (link.href !== '/admin/dashboard' && pathname.startsWith(link.href + '/'));
+                }
 
                 return (
                   <Link

@@ -529,6 +529,7 @@ model ShippingZone {
   nameAr                String
   nameEn                String
   fee                   Int // in minor units (fils)
+  cost                  Int?    @default(2000) // our courier cost in minor units (fils)
   estimatedDeliveryTime String // e.g. "24-48 hours"
   isEnabled             Boolean @default(true)
   freeShippingThreshold Int? // in minor units, null means disabled

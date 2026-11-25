@@ -60,7 +60,7 @@ export function ProductNewForm({
     if (initialChannel === 'POS') return 'POS';
     return 'BOTH';
   });
-  const [variantType, setVariantType] = useState<'SHADE' | 'SCENT' | 'SIZE' | 'NONE'>('SHADE');
+  const [variantType, setVariantType] = useState<'SHADE' | 'SCENT' | 'SIZE' | 'NONE'>('NONE');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [autoSku] = useState(() => nextSku || 'GHZ-' + Math.floor(1000 + Math.random() * 9000).toString());
   const [pending, setPending] = useState(false);
@@ -71,14 +71,14 @@ export function ProductNewForm({
   const defaultVariants: CosmeticVariant[] = [
     {
       size: 'Standard',
-      shade: '01',
-      colorName: 'طبيعي Natural',
-      colorHex: '#E6007E',
+      shade: '',
+      colorName: '',
+      colorHex: '',
       imageUrl: '',
       barcode: initialBarcode || '',
-      sku: `${autoSku}-01`,
-      price: '15.000',
-      costPrice: '8.250',
+      sku: `${autoSku}-STD`,
+      price: '5.000',
+      costPrice: '2.750',
       compareAt: '',
       isActive: true
     }
@@ -766,22 +766,22 @@ export function ProductNewForm({
                   </div>
                 )}
 
-                {/* Price (JOD), Cost Price & Offer/Discount Price */}
-                <div className="bg-zinc-50/80 p-3.5 rounded-2xl border-2 border-zinc-200/90 shadow-2xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                {/* Price (JOD) & Cost Price */}
+                <div className="bg-zinc-50/80 p-4 rounded-2xl border-2 border-zinc-200/90 shadow-2xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* 1. سعر البيع للزبون (د.أ) * */}
-                    <div className="flex flex-col justify-between bg-white rounded-xl p-3 border-2 border-zinc-300 hover:border-zinc-400 focus-within:!border-[#E6007E] focus-within:ring-3 focus-within:ring-[#E6007E]/15 transition-all shadow-2xs">
+                    <div className="flex flex-col justify-between bg-white rounded-xl p-3.5 border-2 border-zinc-300 hover:border-zinc-400 focus-within:!border-[#E6007E] focus-within:ring-3 focus-within:ring-[#E6007E]/15 transition-all shadow-2xs">
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <label className="text-xs font-black text-zinc-900 flex items-center gap-1.5 cursor-pointer">
-                            <span className="w-2 h-2 rounded-full bg-[#E6007E]"></span>
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#E6007E]"></span>
                             سعر البيع للزبون (د.أ) *
                           </label>
-                          <span className="text-[10px] font-bold text-[#E6007E] bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">
-                            سعر الجمهور
+                          <span className="text-[11px] font-bold text-[#E6007E] bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-100 font-mono">
+                            = {v.price ? parseFloat(v.price).toFixed(3) : '5.000'} د.أ
                           </span>
                         </div>
-                        <div className="relative flex items-center mt-1">
+                        <div className="relative flex items-center mt-1.5">
                           <input
                             type="text"
                             inputMode="decimal"
@@ -789,92 +789,55 @@ export function ProductNewForm({
                             value={v.price}
                             onChange={e => updateVariant(i, 'price', sanitizePriceInput(e.target.value))}
                             required
-                            placeholder="15.000"
-                            className="w-full h-11 px-3 pl-12 bg-zinc-50/50 hover:bg-white focus:bg-white border-2 border-zinc-300 focus:border-[#E6007E] rounded-xl text-base font-black font-mono text-zinc-900 outline-none transition-all placeholder:text-zinc-400 placeholder:font-normal"
+                            placeholder="5.000"
+                            className="w-full h-12 px-3.5 pl-14 bg-zinc-50/50 hover:bg-white focus:bg-white border-2 border-zinc-300 focus:border-[#E6007E] rounded-xl text-lg font-black font-mono text-zinc-900 outline-none transition-all placeholder:text-zinc-400 placeholder:font-normal"
                             dir="ltr"
                           />
-                          <div className="absolute left-2.5 flex items-center pointer-events-none select-none">
-                            <span className="text-[11px] font-black text-zinc-600 bg-zinc-200/80 px-2 py-1 rounded-md font-sans">
+                          <div className="absolute left-3 flex items-center pointer-events-none select-none">
+                            <span className="text-xs font-black text-zinc-600 bg-zinc-200/80 px-2.5 py-1 rounded-md font-sans">
                               د.أ
                             </span>
                           </div>
                         </div>
                       </div>
-                      <span className="text-[11px] font-bold text-zinc-500 mt-2 block">سعر الجمهور المعتمد</span>
+                      <span className="text-xs font-bold text-zinc-500 mt-2 block">سعر الجمهور المعتمد للبيع</span>
                     </div>
 
                     {/* 2. سعر التكلفة علينا (د.أ) */}
-                    <div className="flex flex-col justify-between bg-amber-50/30 rounded-xl p-3 border-2 border-amber-300 hover:border-amber-400 focus-within:!border-amber-500 focus-within:ring-3 focus-within:ring-amber-500/15 transition-all shadow-2xs">
+                    <div className="flex flex-col justify-between bg-amber-50/30 rounded-xl p-3.5 border-2 border-amber-300 hover:border-amber-400 focus-within:!border-amber-500 focus-within:ring-3 focus-within:ring-amber-500/15 transition-all shadow-2xs">
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <label className="text-xs font-black text-amber-900 flex items-center gap-1.5 cursor-pointer">
-                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
                             سعر التكلفة علينا (د.أ)
                           </label>
-                          {v.price && v.costPrice && parseFloat(v.price) > parseFloat(v.costPrice) && (
-                            <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300" dir="ltr">
-                              ربح: +{(parseFloat(v.price) - parseFloat(v.costPrice)).toFixed(3)}
-                            </span>
-                          )}
+                          <span className="text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full border border-amber-300 font-mono">
+                            = {(v.costPrice ? parseFloat(v.costPrice) : (parseFloat(v.price || '0') * 0.55)).toFixed(3)} د.أ
+                          </span>
                         </div>
-                        <div className="relative flex items-center mt-1">
+                        <div className="relative flex items-center mt-1.5">
                           <input
                             type="text"
                             inputMode="decimal"
                             autoComplete="off"
                             value={v.costPrice ?? ''}
                             onChange={e => updateVariant(i, 'costPrice', sanitizePriceInput(e.target.value))}
-                            placeholder={v.price ? (parseFloat(v.price) * 0.55).toFixed(3) : '8.250'}
-                            className="w-full h-11 px-3 pl-12 bg-white border-2 border-amber-300 focus:border-amber-600 rounded-xl text-base font-black font-mono text-amber-950 outline-none transition-all placeholder:text-amber-400/60 placeholder:font-normal"
+                            placeholder={v.price ? (parseFloat(v.price) * 0.55).toFixed(3) : '2.750'}
+                            className="w-full h-12 px-3.5 pl-14 bg-white border-2 border-amber-300 focus:border-amber-600 rounded-xl text-lg font-black font-mono text-amber-950 outline-none transition-all placeholder:text-amber-400/60 placeholder:font-normal"
                             dir="ltr"
                           />
-                          <div className="absolute left-2.5 flex items-center pointer-events-none select-none">
-                            <span className="text-[11px] font-black text-amber-800 bg-amber-200/70 px-2 py-1 rounded-md font-sans">
+                          <div className="absolute left-3 flex items-center pointer-events-none select-none">
+                            <span className="text-xs font-black text-amber-800 bg-amber-200/70 px-2 py-1 rounded-md font-sans">
                               د.أ
                             </span>
                           </div>
                         </div>
                       </div>
-                      <span className="text-[11px] font-bold text-amber-800 block mt-2">تكلفة الشراء للقطعة</span>
-                    </div>
-
-                    {/* 3. السعر الأصلي قبل الخصم (د.أ للعروض) */}
-                    <div className="flex flex-col justify-between bg-rose-50/30 rounded-xl p-3 border-2 border-rose-300 hover:border-rose-400 focus-within:!border-rose-500 focus-within:ring-3 focus-within:ring-rose-500/15 transition-all shadow-2xs">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-black text-rose-900 flex items-center gap-1.5 cursor-pointer">
-                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                            السعر الأصلي قبل الخصم (د.أ للعروض)
-                          </label>
-                          {v.compareAt && parseFloat(v.compareAt) > parseFloat(v.price) && (
-                            <span className="text-[10px] font-black text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300">
-                              خصم -{Math.round(((parseFloat(v.compareAt) - parseFloat(v.price)) / parseFloat(v.compareAt)) * 100)}%
-                            </span>
-                          )}
-                        </div>
-                        <div className="relative flex items-center mt-1">
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            value={v.compareAt || ''}
-                            onChange={e => updateVariant(i, 'compareAt', sanitizePriceInput(e.target.value))}
-                            placeholder="مثال: 18.000"
-                            className="w-full h-11 px-3 pl-12 bg-white border-2 border-rose-300 focus:border-rose-600 rounded-xl text-base font-black font-mono text-rose-950 outline-none transition-all placeholder:text-rose-400/60 placeholder:font-normal"
-                            dir="ltr"
-                          />
-                          <div className="absolute left-2.5 flex items-center pointer-events-none select-none">
-                            <span className="text-[11px] font-black text-rose-800 bg-rose-200/70 px-2 py-1 rounded-md font-sans">
-                              د.أ
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-bold text-rose-700 block mt-2">
-                        {v.compareAt && parseFloat(v.compareAt) > parseFloat(v.price) ? (
-                          `وفر ${(parseFloat(v.compareAt) - parseFloat(v.price)).toFixed(3)} د.أ للزبون`
+                      <span className="text-xs font-bold text-amber-800 block mt-2">
+                        {v.price && v.costPrice && parseFloat(v.price) > parseFloat(v.costPrice) ? (
+                          `هامش ربح تقريبي: +${(parseFloat(v.price) - parseFloat(v.costPrice)).toFixed(3)} د.أ للقطعة`
                         ) : (
-                          'اتركه فارغاً إذا لم يكن عليه عرض'
+                          'تكلفة الشراء والتوريد للقطعة'
                         )}
                       </span>
                     </div>

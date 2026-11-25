@@ -2,10 +2,9 @@
 
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/dal';
-import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { revalidatePath } from 'next/cache';
 import { formatJordanDateTime } from '@/lib/date';
-import { GHAZAL_DEMO_ORDERS, getDemoOrderById } from '@/lib/orders-catalog';
+import { getDemoOrderById } from '@/lib/orders-catalog';
 import {
   calculateCashDrawerReconciliation,
   calculateCourierBatchSettlement,
@@ -303,7 +302,7 @@ export interface OperatingExpense {
 }
 
 // ====================================================================
-// IN-MEMORY RESILIENT DATA STATE (جاهز ومطابق لتصور المحل الواحد)
+// DATABASE-DRIVEN SETTLEMENTS & INVENTORY STATE
 // ====================================================================
 
 interface StoreSettlementsState {
@@ -327,23 +326,11 @@ interface StoreSettlementsState {
 }
 
 const memoryStoreState: StoreSettlementsState = (globalThis as any).__ghazal_store_settlements_state || {
-  inventory: {
-    'MAY-VIN-020': { physicalStock: 20, reservedStock: 3, unitCostFils: 7500, reorderLevel: 5, channel: 'ALL' },
-    'LOR-TRUE-3N': { physicalStock: 12, reservedStock: 2, unitCostFils: 11000, reorderLevel: 4, channel: 'POS' },
-    'THE-NIAC-30': { physicalStock: 25, reservedStock: 4, unitCostFils: 5500, reorderLevel: 6, channel: 'ONLINE' },
-    'HUDA-FAUX-100': { physicalStock: 8, reservedStock: 1, unitCostFils: 18000, reorderLevel: 3, channel: 'ALL' },
-    'MAC-LIP-VELVET': { physicalStock: 15, reservedStock: 0, unitCostFils: 14000, reorderLevel: 5, channel: 'POS' },
-    'ANAS-DIP-MED': { physicalStock: 6, reservedStock: 2, unitCostFils: 12000, reorderLevel: 3, channel: 'ALL' },
-    'CER-HYDR-473': { physicalStock: 18, reservedStock: 3, unitCostFils: 8500, reorderLevel: 5, channel: 'ONLINE' },
-    'NARS-BLUSH-ORG': { physicalStock: 3, reservedStock: 1, unitCostFils: 19000, reorderLevel: 4, channel: 'ALL' }, // Low stock!
-    'CHAR-AIR-FAIR': { physicalStock: 4, reservedStock: 1, unitCostFils: 22000, reorderLevel: 4, channel: 'POS' }, // Low stock!
-    'RARE-BLUSH-HOPE': { physicalStock: 2, reservedStock: 0, unitCostFils: 15000, reorderLevel: 3, channel: 'ALL' }, // Low stock!
-    'FENT-GLOSS-FENT': { physicalStock: 10, reservedStock: 2, unitCostFils: 13000, reorderLevel: 4, channel: 'ONLINE' }
-  },
+  inventory: {},
   auditSessions: [],
   goodsMovements: [],
   deliverySettlement: {
-    companyName: 'سريعة إكسبرس',
+    companyName: 'شبلي',
     period: 'الفترة الحالية',
     codRequiredFils: 0,
     codCollectedFils: 0,
@@ -358,44 +345,102 @@ const memoryStoreState: StoreSettlementsState = (globalThis as any).__ghazal_sto
   purchaseInvoices: [],
   operatingExpenses: [],
   deliveryOrders: [],
-  courierCompanies: (globalThis as any).__ghazal_courier_companies || [
-    {
-      id: 'comp-1',
-      name: 'سريعة إكسبرس',
-      phone: '0791112233',
-      type: 'COMPANY',
-      active: true,
-      isDefaultStoreCourier: true,
-      defaultFeeFils: 2500,
-      notes: 'الشركة المعتمدة الرئيسية للتوصيل لكافة محافظات المملكة',
-      createdAt: '2026-01-01'
-    },
-    {
-      id: 'comp-2',
-      name: 'أرامكس (Aramex)',
-      phone: '065358899',
-      type: 'COMPANY',
-      active: true,
-      isDefaultStoreCourier: false,
-      defaultFeeFils: 3000,
-      notes: 'شحنات المحافظات البعيدة والمستعجلة',
-      createdAt: '2026-01-05'
-    },
-    {
-      id: 'comp-3',
-      name: 'مندوب غزل الخاص (عين الباشا)',
-      phone: '0795554433',
-      type: 'DELEGATE',
-      active: true,
-      isDefaultStoreCourier: false,
-      defaultFeeFils: 1500,
-      notes: 'توصيل محلي فوري داخل لواء عين الباشا ومخيم البقعة',
-      createdAt: '2026-01-10'
-    }
-  ]
+  courierBatches: [],
+  courierCompanies: []
 };
 
 (globalThis as any).__ghazal_store_settlements_state = memoryStoreState;
+
+// Database helpers for persistent settlements configuration
+async function getOperatingExpensesFromDb(): Promise<OperatingExpense[]> {
+  try {
+    const s = await prisma.siteSettings.findUnique({ where: { key: 'ghazal_operating_expenses' } });
+    if (s?.value) {
+      const parsed = JSON.parse(s.value);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('Error loading operating expenses from DB:', err);
+  }
+  return [];
+}
+
+async function saveOperatingExpensesToDb(expenses: OperatingExpense[]): Promise<void> {
+  try {
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_operating_expenses' },
+      update: { value: JSON.stringify(expenses) },
+      create: { key: 'ghazal_operating_expenses', value: JSON.stringify(expenses) }
+    });
+  } catch (err) {
+    console.warn('Error saving operating expenses to DB:', err);
+  }
+  memoryStoreState.operatingExpenses = expenses;
+}
+
+async function getCourierBatchesFromDb(): Promise<CourierBatchRecord[]> {
+  try {
+    const s = await prisma.siteSettings.findUnique({ where: { key: 'ghazal_courier_batches' } });
+    if (s?.value) {
+      const parsed = JSON.parse(s.value);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('Error loading courier batches from DB:', err);
+  }
+  return [];
+}
+
+async function saveCourierBatchesToDb(batches: CourierBatchRecord[]): Promise<void> {
+  try {
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_courier_batches' },
+      update: { value: JSON.stringify(batches) },
+      create: { key: 'ghazal_courier_batches', value: JSON.stringify(batches) }
+    });
+  } catch (err) {
+    console.warn('Error saving courier batches to DB:', err);
+  }
+  memoryStoreState.courierBatches = batches;
+}
+
+async function getCourierCompaniesFromDb(): Promise<CourierCompany[]> {
+  try {
+    const s = await prisma.siteSettings.findUnique({ where: { key: 'ghazal_courier_companies' } });
+    if (s?.value) {
+      const parsed = JSON.parse(s.value);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.warn('Error loading courier companies from DB:', err);
+  }
+  return [
+    {
+      id: 'comp-shibli',
+      name: 'شبلي',
+      phone: '0790000000',
+      type: 'COMPANY',
+      active: true,
+      isDefaultStoreCourier: true,
+      defaultFeeFils: 2000,
+      notes: 'شركة التوصيل المعتمدة الرئيسية للتوصيل لكافة محافظات المملكة',
+      createdAt: '2026-01-01'
+    }
+  ];
+}
+
+async function saveCourierCompaniesToDb(companies: CourierCompany[]): Promise<void> {
+  try {
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_courier_companies' },
+      update: { value: JSON.stringify(companies) },
+      create: { key: 'ghazal_courier_companies', value: JSON.stringify(companies) }
+    });
+  } catch (err) {
+    console.warn('Error saving courier companies to DB:', err);
+  }
+  memoryStoreState.courierCompanies = companies;
+}
 
 // ====================================================================
 // CORE GETTER FOR DASHBOARD & ALL 6 SECTIONS
@@ -404,58 +449,61 @@ const memoryStoreState: StoreSettlementsState = (globalThis as any).__ghazal_sto
 export async function getSettlementsDashboardData(channelFilter?: string) {
   const currentChannel: StoreChannel = (channelFilter === 'POS' || channelFilter === 'ONLINE') ? channelFilter : 'ALL';
 
-  // 1. Compile inventory list matching COSMETICS_CATALOG
+  // 1. Compile inventory list from real database products
   const inventoryList: StoreInventoryItem[] = [];
 
-  for (const prod of COSMETICS_CATALOG) {
-    for (const v of prod.variants) {
-      const stateItem = memoryStoreState.inventory[v.sku] || {
-        physicalStock: v.stock ?? 15,
-        reservedStock: Math.floor(Math.random() * 3),
-        unitCostFils: Math.round(v.price * 0.7),
-        reorderLevel: 4,
-        channel: 'ALL' as StoreChannel
-      };
+  try {
+    const dbProducts = await prisma.product.findMany({
+      include: {
+        brand: true,
+        category: true,
+        variants: true,
+        images: { orderBy: { isMain: 'desc' }, take: 1 }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
-      const itemChannel = stateItem.channel;
+    for (const prod of dbProducts as any[]) {
+      for (const v of (prod.variants || [])) {
+        const itemChannel: StoreChannel = (prod.channel as StoreChannel) || 'ALL';
 
-      // Filter by channel if requested (unless ALL is selected)
-      if (currentChannel !== 'ALL' && itemChannel !== 'ALL' && itemChannel !== currentChannel) {
-        continue;
+        if (currentChannel !== 'ALL' && itemChannel !== 'ALL' && itemChannel !== currentChannel) {
+          continue;
+        }
+
+        const physicalStock = (v as any).stock ?? 0;
+        const reservedStock = 0;
+        const availableStock = Math.max(0, physicalStock - reservedStock);
+        const isLowStock = availableStock <= 4;
+        const isVisible = (prod as any).isActive !== false && (prod as any).isVisible !== false;
+
+        inventoryList.push({
+          id: v.id,
+          productId: prod.id,
+          name: prod.nameAr,
+          sku: v.sku,
+          barcode: v.barcode || '',
+          imageUrl: prod.images?.[0]?.url || '/logo.png',
+          brand: prod.brand?.nameAr || prod.brand?.nameEn || 'غزل',
+          category: prod.category?.nameAr || prod.category?.nameEn || 'مستحضرات تجميل',
+          specification: v.size || v.shade || v.colorName || 'قياسي',
+          physicalStock,
+          reservedStock,
+          availableStock,
+          unitCostFils: Math.round(((v as any).price || (prod as any).basePrice || 0) * 0.55),
+          sellingPriceFils: (v as any).price || (prod as any).basePrice || 0,
+          reorderLevel: 4,
+          channel: itemChannel,
+          isLowStock,
+          isVisible
+        });
       }
-
-      const physicalStock = stateItem.physicalStock;
-      const reservedStock = stateItem.reservedStock;
-      const availableStock = Math.max(0, physicalStock - reservedStock);
-      const isLowStock = availableStock <= stateItem.reorderLevel;
-
-      const hiddenSet: Set<string> = (globalThis as any).__ghazal_hidden_products || new Set<string>();
-      const isVisible = !hiddenSet.has(prod.id);
-
-      inventoryList.push({
-        id: v.id,
-        productId: prod.id,
-        name: prod.nameAr,
-        sku: v.sku,
-        barcode: v.barcode || `628100${v.id.replace(/\D/g, '').padEnd(6, '0')}`,
-        imageUrl: prod.images?.[0]?.url || '/logo.png',
-        brand: prod.brandName || 'غزل',
-        category: prod.categoryName || 'مستحضرات تجميل',
-        specification: v.size || v.shade || v.colorName || 'قياسي',
-        physicalStock,
-        reservedStock,
-        availableStock,
-        unitCostFils: stateItem.unitCostFils,
-        sellingPriceFils: v.price,
-        reorderLevel: stateItem.reorderLevel,
-        channel: itemChannel,
-        isLowStock,
-        isVisible
-      });
     }
+  } catch (err) {
+    console.warn('Error fetching inventory for settlements from DB:', err);
   }
 
-  // 2. Fetch real POS sales from DB and in-memory log for 100% synchronization
+  // 2. Fetch real POS sales from DB
   let realCashSalesList: CashSaleRecord[] = [];
   let dbSalesTotalFils = 0;
 
@@ -502,45 +550,6 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
     console.warn('Prisma sales lookup fallback for settlements:', err);
   }
 
-  // Merge resilient sales log
-  const inMemSalesLog: any[] = (globalThis as any).__ghazal_pos_sales_log || [];
-  for (const s of inMemSalesLog) {
-    if (!realCashSalesList.some(r => r.id === s.saleId || r.receiptNumber === s.reference || r.receiptNumber === s.invoiceNumber)) {
-      const pm = s.paymentMethod || 'CASH';
-      let methodLabel = 'نقد (كاش)';
-      if (pm === 'CARD') methodLabel = 'بطاقة POS';
-      else if (pm === 'WALLET') methodLabel = 'محفظة إلكترونية';
-      else if (pm === 'CREDIT') methodLabel = 'آجل (ذمم)';
-
-      const dateStr = formatJordanDateTime(s.createdAt ? new Date(s.createdAt) : new Date());
-      realCashSalesList.unshift({
-        id: s.saleId || `sale-${Date.now()}`,
-        receiptNumber: s.invoiceNumber || s.reference,
-        date: dateStr,
-        cashierName: s.cashierName || 'كاشير غزل (عين الباشا)',
-        totalFils: s.total,
-        itemsCount: (s.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0),
-        paymentMethod: methodLabel,
-        customerName: s.customerName || 'عميل نقدي',
-        status: s.status || (s.isRefunded ? 'REFUNDED' : (s.isModified ? 'MODIFIED' : 'COMPLETED')),
-        isRefunded: s.isRefunded || s.status === 'REFUNDED',
-        isModified: s.isModified || false,
-        refundAmountFils: s.refundAmountFils || 0,
-        notes: s.notes || null
-      });
-      dbSalesTotalFils += s.total;
-    }
-  }
-
-  if (realCashSalesList.length === 0) {
-    realCashSalesList = [
-      { id: 'sale-1', receiptNumber: 'POS-2026-901', date: '2026-11-20 10:15 AM', cashierName: 'محمود العمري (كاشير غزل)', totalFils: 24500, itemsCount: 3, paymentMethod: 'نقد (كاش)', customerName: 'زبونة نقدية' },
-      { id: 'sale-2', receiptNumber: 'POS-2026-902', date: '2026-11-20 09:40 AM', cashierName: 'محمود العمري (كاشير غزل)', totalFils: 18000, itemsCount: 2, paymentMethod: 'نقد (كاش)', customerName: 'سارة العبداللات' },
-      { id: 'sale-3', receiptNumber: 'POS-2026-903', date: '2026-11-19 06:25 PM', cashierName: 'محمود العمري (كاشير غزل)', totalFils: 32000, itemsCount: 4, paymentMethod: 'بطاقة POS', customerName: 'زبونة نقدية' }
-    ];
-    dbSalesTotalFils = 74500;
-  }
-
   // Ensure cash sales are strictly ordered newest first
   realCashSalesList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -568,40 +577,19 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
     }
   } catch (e) {}
 
-  // Include ALL GHAZAL_DEMO_ORDERS so that demo orders are officially recognized across settlements, P&L, and filters
-  for (const ord of GHAZAL_DEMO_ORDERS) {
-    if (!realOnlineOrders.some(o => o.id === ord.id || o.orderNumber === ord.reference)) {
-      let statusLabel = 'طلب جديد';
-      if (ord.status === 'PREPARED') statusLabel = 'تم التجهيز بانتظار الشحن';
-      else if (ord.status === 'SHIPPED') statusLabel = 'خرج للتوصيل مع المندوب 🚚';
-      else if (ord.status === 'DELIVERED') statusLabel = 'تم التسليم بالكامل ✓';
-      else if (ord.status === 'CANCELLED') statusLabel = 'ملغي ❌';
-      else if (ord.status === 'PREPARING' || ord.status === 'CONFIRMED') statusLabel = 'مؤكد وقيد التجهيز';
-
-      const city = ord.addressStreet ? ord.addressStreet.split('-')[0].trim() : 'عين الباشا';
-
-      realOnlineOrders.push({
-        id: ord.id,
-        orderNumber: ord.reference,
-        date: formatJordanDateTime(new Date(ord.createdAt)),
-        customerName: ord.customerName,
-        city: city || 'عين الباشا',
-        phone: ord.customerPhone,
-        totalFils: ord.totalAmount,
-        status: statusLabel,
-        paymentMethod: 'دفع عند الاستلام COD'
-      });
-    }
-  }
-
   // Recalculate total online sales
   onlineSalesTotalFils = realOnlineOrders.reduce((acc, o) => acc + o.totalFils, 0);
 
-  // Calculate Top 4 Financial KPI Cards
-  const cashExpensesList = memoryStoreState.operatingExpenses.filter(e => e.paymentMethod === 'CASH');
-  const cashExpensesTotalFils = cashExpensesList.reduce((acc, e) => acc + e.amountFils, 0) || 55000;
+  // Load persistent operating expenses, courier batches, and courier companies from database
+  const operatingExpenses = await getOperatingExpensesFromDb();
+  const courierBatches = await getCourierBatchesFromDb();
+  const courierCompanies = await getCourierCompaniesFromDb();
+
+  // Calculate Financial KPI Cards
+  const cashExpensesList = operatingExpenses.filter(e => e.paymentMethod === 'CASH');
+  const cashExpensesTotalFils = cashExpensesList.reduce((acc, e) => acc + e.amountFils, 0);
   const cashSalesTotalFils = dbSalesTotalFils;
-  const deliveryReceivableFils = memoryStoreState.deliverySettlement.remainingFils || 185000;
+  const deliveryReceivableFils = courierBatches.reduce((acc, b) => acc + (b.remainingFils || 0), 0);
 
   // 3. Filter Goods Movements
   const goodsMovements = memoryStoreState.goodsMovements.filter(m => {
@@ -614,7 +602,7 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
   const cogsFils = Math.round(totalGrossSalesFils * 0.65);
   const grossProfitFils = totalGrossSalesFils - cogsFils;
   
-  const directOperatingExpensesFils = memoryStoreState.operatingExpenses.reduce((acc, e) => acc + e.amountFils, 0);
+  const directOperatingExpensesFils = operatingExpenses.reduce((acc, e) => acc + e.amountFils, 0);
   const deliveryFeesFils = memoryStoreState.deliverySettlement.deliveryFeesDeductibleFils;
   const totalExpensesFils = directOperatingExpensesFils + deliveryFeesFils;
   
@@ -623,35 +611,40 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
   const cashSalesList: CashSaleRecord[] = realCashSalesList;
   const onlineOrdersList: OnlineOrderRecord[] = realOnlineOrders;
 
-  // Sync delivery orders with all online orders
-  if (!memoryStoreState.deliveryOrders || memoryStoreState.deliveryOrders.length <= 3) {
-    memoryStoreState.deliveryOrders = [];
-  }
-  for (const ord of GHAZAL_DEMO_ORDERS) {
-    if (!memoryStoreState.deliveryOrders.some(d => d.id === ord.id || d.orderNumber === ord.reference)) {
+  // Real delivery orders from database
+  const deliveryOrdersList: DeliveryOrderRecord[] = [];
+  try {
+    const dbOrdersWithDelivery = await prisma.order.findMany({
+      where: {
+        status: { in: ['SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED'] }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    });
+    for (const ord of dbOrdersWithDelivery) {
       const isDelivered = ord.status === 'DELIVERED';
       const isCancelled = ord.status === 'CANCELLED';
-      const isShipped = ord.status === 'SHIPPED';
-      const fee = ord.shippingCost || 2000;
+      const fee = (ord as any).shippingCost || 2000;
       const cod = isCancelled ? 0 : ord.totalAmount;
       const net = isCancelled ? 0 : Math.max(0, cod - fee);
-      const city = ord.addressStreet ? ord.addressStreet.split('-')[0].trim() : 'عين الباشا';
+      const city = (ord as any).city || 'عمّان';
 
-      memoryStoreState.deliveryOrders.push({
+      deliveryOrdersList.push({
         id: ord.id,
         orderNumber: ord.reference,
-        companyName: 'سريعة اكسبرس',
+        companyName: 'شبلي',
         customerName: ord.customerName,
-        city: city || 'عين الباشا',
+        city,
         codAmountFils: cod,
         deliveryFeeFils: fee,
         netSettlementFils: net,
-        status: isDelivered ? 'DELIVERED_COLLECTED' : isCancelled ? 'RETURNED' : isShipped ? 'IN_TRANSIT' : 'IN_TRANSIT',
-        date: ord.createdAt.split('T')[0]
+        status: isDelivered ? 'DELIVERED_COLLECTED' : isCancelled ? 'RETURNED' : 'IN_TRANSIT',
+        date: ord.createdAt.toISOString().split('T')[0]
       });
     }
+  } catch (err) {
+    console.warn('Error fetching delivery orders from DB:', err);
   }
-  const deliveryOrdersList: DeliveryOrderRecord[] = memoryStoreState.deliveryOrders;
 
   // 5. Central Invoices List (Fully includes both POS and all Online Store Demo Orders)
   let centralInvoicesList: any[] = [];
@@ -706,20 +699,20 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
     }
   }
 
-  // Ensure Online Store demo orders invoices are present in central invoices registry
-  for (const ord of GHAZAL_DEMO_ORDERS) {
-    if (!centralInvoicesList.some(inv => inv.id === ord.id || inv.number === ord.reference)) {
+  // Ensure real online orders have invoices represented in central invoices registry
+  for (const ord of realOnlineOrders) {
+    if (!centralInvoicesList.some(inv => inv.id === ord.id || inv.number === ord.orderNumber)) {
       centralInvoicesList.push({
         id: ord.id,
-        number: ord.reference,
+        number: ord.orderNumber,
         source: 'STOREFRONT' as const,
         customerName: ord.customerName,
         cashierName: 'متجر غزل الإلكتروني',
-        grossTotalFils: ord.totalAmount,
+        grossTotalFils: ord.totalFils,
         paymentStatus: ord.status === 'DELIVERED' ? 'PAID' : ord.status === 'CANCELLED' ? 'CANCELLED' : 'PAID',
         taxSubmissionStatus: 'ACCEPTED',
         printed: 1,
-        date: formatJordanDateTime(new Date(ord.createdAt))
+        date: ord.date
       });
     }
   }
@@ -727,222 +720,8 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
   // Sort invoices newest first
   centralInvoicesList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // 6. Courier Batches Initialization (Defaulting to the user-specified 10-order partial delivery scenario)
-  if (!memoryStoreState.courierBatches || memoryStoreState.courierBatches.length === 0) {
-    memoryStoreState.courierBatches = [
-      {
-        id: 'batch-001',
-        batchNumber: 'BATCH-001',
-        courierName: 'سريعة اكسبرس',
-        status: 'PARTIALLY_DELIVERED',
-        createdAt: '2026-11-24T08:30:00.000Z',
-        updatedAt: '2026-11-24T14:00:00.000Z',
-        notes: 'طلبية توصيل مجمعة #BATCH-001 — تسوية جزئية (7 تم التسليم، 2 مرتجع، 1 قيد التوصيل)',
-        orders: [
-          // 7 Delivered orders (Actual collection = 140 JOD, Delivery fees = 21 JOD)
-          {
-            orderId: 'del-1',
-            orderNumber: 'ORD-7001',
-            customerName: 'سارة خالد',
-            customerPhone: '0799112233',
-            city: 'عمان',
-            address: 'خلدا - دوار المنهل',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T12:30:00.000Z'
-          },
-          {
-            orderId: 'del-2',
-            orderNumber: 'ORD-7002',
-            customerName: 'رنا أحمد',
-            customerPhone: '0788223344',
-            city: 'عمان',
-            address: 'طبربور - قرب السيفوي',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T12:45:00.000Z'
-          },
-          {
-            orderId: 'del-3',
-            orderNumber: 'ORD-7003',
-            customerName: 'هدى يوسف',
-            customerPhone: '0777334455',
-            city: 'الزرقاء',
-            address: 'الزرقاء الجديدة - شارع 36',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T13:00:00.000Z'
-          },
-          {
-            orderId: 'del-4',
-            orderNumber: 'ORD-7004',
-            customerName: 'مها محمود',
-            customerPhone: '0799445566',
-            city: 'إربد',
-            address: 'إربد - الحي الشرقي',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T13:15:00.000Z'
-          },
-          {
-            orderId: 'del-5',
-            orderNumber: 'ORD-7005',
-            customerName: 'لينا إبراهيم',
-            customerPhone: '0788556677',
-            city: 'عمان',
-            address: 'الجبيهة - دوار المنهل',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T13:30:00.000Z'
-          },
-          {
-            orderId: 'del-6',
-            orderNumber: 'ORD-7006',
-            customerName: 'دعاء صالح',
-            customerPhone: '0777667788',
-            city: 'السلط',
-            address: 'ديران - قرب البلدية',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T13:40:00.000Z'
-          },
-          {
-            orderId: 'del-7',
-            orderNumber: 'ORD-7007',
-            customerName: 'ديما سمير',
-            customerPhone: '0799778899',
-            city: 'مادبا',
-            address: 'طريق المطار - قرب الجامعة',
-            codAmountFils: 20000,
-            collectedCodFils: 20000,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 17000,
-            status: 'DELIVERED',
-            settledAt: '2026-11-24T13:50:00.000Z'
-          },
-          // 2 Returned orders (Collected = 0 JOD, Return fees = 4 JOD)
-          {
-            orderId: 'del-8',
-            orderNumber: 'ORD-7008',
-            customerName: 'سلمى كريم',
-            customerPhone: '0788889900',
-            city: 'عمان',
-            address: 'الصويفية - شارع الوكالات',
-            codAmountFils: 20000,
-            collectedCodFils: 0,
-            deliveryFeeFils: 0,
-            returnFeeFils: 2000,
-            discrepancyFils: -20000,
-            netSettlementFils: -2000,
-            status: 'RETURNED',
-            notes: 'رفضت الزبونة الاستلام - عاد إلى المعرض مع احتساب 2.000 د.أ أجور إرجاع'
-          },
-          {
-            orderId: 'del-9',
-            orderNumber: 'ORD-7009',
-            customerName: 'أسماء عادل',
-            customerPhone: '0777990011',
-            city: 'العقبة',
-            address: 'المنطقة الشمالية',
-            codAmountFils: 20000,
-            collectedCodFils: 0,
-            deliveryFeeFils: 0,
-            returnFeeFils: 2000,
-            discrepancyFils: -20000,
-            netSettlementFils: -2000,
-            status: 'RETURNED',
-            notes: 'عدم الرد على المندوب 3 مرات - عاد إلى المعرض مع احتساب 2.000 د.أ أجور إرجاع'
-          },
-          // 1 In-Transit order (Pending)
-          {
-            orderId: 'del-10',
-            orderNumber: 'ORD-7010',
-            customerName: 'يارا ناصر',
-            customerPhone: '0799001122',
-            city: 'عمان',
-            address: 'تلاع العلي - شارع المدينة المنورة',
-            codAmountFils: 20000,
-            collectedCodFils: null,
-            deliveryFeeFils: 3000,
-            returnFeeFils: 0,
-            discrepancyFils: 0,
-            netSettlementFils: 0,
-            status: 'IN_TRANSIT',
-            notes: 'قيد التوصيل مع المندوب - جولة المساء'
-          }
-        ],
-        totalExpectedCodFils: 200000, // 200.000 د.أ
-        totalCollectedCodFils: 140000, // 140.000 د.أ
-        totalCodFils: 140000, // 140.000 د.أ
-        totalDeliveryFeeFils: 21000, // 21.000 د.أ
-        totalReturnFeeFils: 4000, // 4.000 د.أ
-        totalCourierFeesFils: 25000, // 25.000 د.أ
-        netSettlementFils: 115000, // 115.000 د.أ (140 - 21 - 4)
-        storeReceivableFils: 115000,
-        companyPayableFils: 0,
-        remittedFils: 0,
-        remainingFils: 115000,
-        deliveredOrdersCount: 7,
-        returnedOrdersCount: 2,
-        inTransitOrdersCount: 1,
-        isPartialSettlement: true,
-        remittances: []
-      }
-    ];
-  }
-
-  // 7. Collect all orders in PREPARED status waiting for courier batch assignment
+  // 6. Collect all orders in PREPARED status waiting for courier batch assignment from DB
   const preparedOrdersList: CourierBatchOrderSummary[] = [];
-  for (const ord of GHAZAL_DEMO_ORDERS) {
-    if (ord.status === 'PREPARED' || ord.status === 'READY_FOR_DELIVERY') {
-      const cod = ord.totalAmount;
-      const fee = ord.shippingCost || 2000;
-      preparedOrdersList.push({
-        orderId: ord.id,
-        orderNumber: ord.reference,
-        customerName: ord.customerName,
-        customerPhone: ord.customerPhone,
-        city: ord.addressStreet ? ord.addressStreet.split('-')[0].trim() : 'عين الباشا',
-        address: [ord.addressStreet, ord.addressBuilding, ord.addressApartment].filter(Boolean).join('، ') || 'عين الباشا',
-        codAmountFils: cod,
-        deliveryFeeFils: fee,
-        netSettlementFils: Math.max(0, cod - fee),
-        status: ord.status
-      });
-    }
-  }
 
   try {
     const dbPrepared = await prisma.order.findMany({
@@ -950,22 +729,27 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
       orderBy: { createdAt: 'desc' }
     });
     for (const ord of dbPrepared) {
-      if (!preparedOrdersList.some(p => p.orderId === ord.id || p.orderNumber === ord.reference)) {
-        preparedOrdersList.push({
-          orderId: ord.id,
-          orderNumber: ord.reference,
-          customerName: ord.customerName,
-          customerPhone: ord.customerPhone,
-          city: 'المملكة الأردنية',
-          address: ord.notes || 'العنوان مسجل',
-          codAmountFils: ord.totalAmount,
-          deliveryFeeFils: ord.shippingCost,
-          netSettlementFils: Math.max(0, ord.totalAmount - ord.shippingCost),
-          status: ord.status
-        });
-      }
+      const cod = ord.totalAmount;
+      const fee = ord.shippingCost || 2000;
+      preparedOrdersList.push({
+        orderId: ord.id,
+        orderNumber: ord.reference,
+        customerName: ord.customerName,
+        customerPhone: ord.customerPhone,
+        city: (ord as any).city || 'عمّان',
+        address: ord.notes || 'العنوان مسجل',
+        codAmountFils: cod,
+        deliveryFeeFils: fee,
+        netSettlementFils: Math.max(0, cod - fee),
+        status: ord.status
+      });
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Error fetching prepared orders from DB:', e);
+  }
+
+  const totalStockCostFils = inventoryList.reduce((acc, i) => acc + (i.physicalStock * i.unitCostFils), 0);
+  const reorderNeededCount = inventoryList.filter(i => i.physicalStock <= i.reorderLevel).length;
 
   return {
     channelFilter: currentChannel,
@@ -974,17 +758,17 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
       onlineSalesTotalFils,
       deliveryReceivableFils,
       cashExpensesTotalFils,
-      totalStockCostFils: 2450000,
-      reorderNeededCount: 0,
-      openVariancesFils: 12000
+      totalStockCostFils,
+      reorderNeededCount,
+      openVariancesFils: 0
     },
     inventory: inventoryList,
     cashSales: cashSalesList,
     onlineOrders: onlineOrdersList,
     deliveryOrders: deliveryOrdersList,
     preparedOrders: preparedOrdersList,
-    courierBatches: memoryStoreState.courierBatches,
-    courierCompanies: memoryStoreState.courierCompanies || [],
+    courierBatches,
+    courierCompanies,
     cashExpenses: cashExpensesList,
     invoices: centralInvoicesList,
     auditSessions: memoryStoreState.auditSessions,
@@ -993,14 +777,14 @@ export async function getSettlementsDashboardData(channelFilter?: string) {
     cashDrawerSettlements: memoryStoreState.cashDrawerSettlements,
     bankSettlements: memoryStoreState.bankSettlements,
     purchaseInvoices: memoryStoreState.purchaseInvoices,
-    operatingExpenses: memoryStoreState.operatingExpenses,
+    operatingExpenses,
     pnlReport: {
-      grossSalesFils: totalGrossSalesFils > 0 ? totalGrossSalesFils : 1000000,
-      cogsFils: totalGrossSalesFils > 0 ? cogsFils : 650000,
-      grossProfitFils: totalGrossSalesFils > 0 ? grossProfitFils : 350000,
-      operatingExpensesFils: totalExpensesFils > 0 ? totalExpensesFils : 150000,
-      netOperatingProfitFils: totalGrossSalesFils > 0 ? netOperatingProfitFils : 200000,
-      inventoryCostValuationFils: 2450000
+      grossSalesFils: totalGrossSalesFils,
+      cogsFils: cogsFils,
+      grossProfitFils: grossProfitFils,
+      operatingExpensesFils: totalExpensesFils,
+      netOperatingProfitFils: netOperatingProfitFils,
+      inventoryCostValuationFils: totalStockCostFils
     }
   };
 }
@@ -1014,13 +798,25 @@ export async function startNewAuditSession(channel: StoreChannel = 'ALL', audito
     const nextSeq = (memoryStoreState.auditSessions.length + 1).toString().padStart(3, '0');
     const sessionNumber = `AUD-2026-${nextSeq}`;
 
-    // Generate items to count from catalog
+    // Generate items to count from real database products
     const sessionItems: AuditSessionItem[] = [];
-    for (const prod of COSMETICS_CATALOG.slice(0, 15)) {
-      for (const v of prod.variants.slice(0, 1)) {
+    let dbProducts: any[] = [];
+    try {
+      dbProducts = await prisma.product.findMany({
+        include: { variants: true }
+      });
+    } catch (e) {
+      console.warn('Prisma products lookup for audit session:', e);
+    }
+
+    for (const prod of dbProducts) {
+      const variants = prod.variants && prod.variants.length > 0 ? prod.variants : [
+        { sku: prod.sku || `SKU-${prod.id}`, price: prod.price || 0, size: null, shade: null }
+      ];
+      for (const v of variants) {
         const itemState = memoryStoreState.inventory[v.sku] || {
-          physicalStock: v.stock ?? 15,
-          reservedStock: 2,
+          physicalStock: 0,
+          reservedStock: 0,
           unitCostFils: Math.round(v.price * 0.7),
           reorderLevel: 4,
           channel: 'ALL'
@@ -1477,8 +1273,9 @@ export async function recordNewOperatingExpense(data: {
       return { success: false, error: 'يرجى تحديد الجهة المستفيدة من المصروف' };
     }
     const cleanAmountFils = Math.round(data.amountFils);
+    const expenses = await getOperatingExpensesFromDb();
 
-    const nextSeq = (memoryStoreState.operatingExpenses.length + 101).toString();
+    const nextSeq = (expenses.length + 101).toString();
     const newExpense: OperatingExpense = {
       id: `exp-${Date.now()}`,
       expenseNumber: `EXP-${nextSeq}`,
@@ -1492,7 +1289,9 @@ export async function recordNewOperatingExpense(data: {
       notes: data.notes
     };
 
-    memoryStoreState.operatingExpenses.unshift(newExpense);
+    expenses.unshift(newExpense);
+    await saveOperatingExpensesToDb(expenses);
+
     revalidatePath('/admin/settlements');
     return { success: true, expense: newExpense };
   } catch (error: any) {
@@ -1502,10 +1301,9 @@ export async function recordNewOperatingExpense(data: {
 
 export async function deleteOperatingExpenseAction(expenseId: string) {
   try {
-    if (!memoryStoreState.operatingExpenses) {
-      return { success: false, error: 'سجل المصروفات غير متوفر' };
-    }
-    memoryStoreState.operatingExpenses = memoryStoreState.operatingExpenses.filter(e => e.id !== expenseId);
+    const expenses = await getOperatingExpensesFromDb();
+    const filtered = expenses.filter(e => e.id !== expenseId);
+    await saveOperatingExpensesToDb(filtered);
     revalidatePath('/admin/settlements');
     return { success: true };
   } catch (err: any) {
@@ -1570,7 +1368,9 @@ export async function recordCashierDrawerExpense(data: {
       notes: data.reason
     };
 
-    memoryStoreState.operatingExpenses.unshift(newExp);
+    const expenses = await getOperatingExpensesFromDb();
+    expenses.unshift(newExp);
+    await saveOperatingExpensesToDb(expenses);
 
     revalidatePath('/admin/settlements');
     revalidatePath('/pos/cashier');
@@ -1648,13 +1448,11 @@ export async function createCourierBatchAction(data: {
       return { success: false, error: 'يرجى تحديد طلب واحد على الأقل لإدراجه في الطلبية' };
     }
 
-    if (!memoryStoreState.courierBatches) {
-      memoryStoreState.courierBatches = [];
-    }
+    const batches = await getCourierBatchesFromDb();
 
     // Check if batch number already exists
     const cleanNum = batchNumber.trim();
-    if (memoryStoreState.courierBatches.some(b => b.batchNumber.toLowerCase() === cleanNum.toLowerCase())) {
+    if (batches.some(b => b.batchNumber.toLowerCase() === cleanNum.toLowerCase())) {
       return { success: false, error: `رقم الطلبية (${cleanNum}) مسجل مسبقاً، يرجى اختيار رقم آخر` };
     }
 
@@ -1663,73 +1461,54 @@ export async function createCourierBatchAction(data: {
     let totalDeliveryFeeFils = 0;
 
     for (const orderId of orderIds) {
-      // Find order in demo orders or DB
-      const demo = getDemoOrderById(orderId);
-      if (demo) {
-        const cod = demo.totalAmount;
-        const fee = demo.shippingCost || 2000;
+      // Find order in DB or fallback
+      let orderObj: any = null;
+      try {
+        orderObj = await prisma.order.findUnique({ where: { id: orderId } });
+      } catch (e) {}
+
+      if (!orderObj) {
+        orderObj = getDemoOrderById(orderId);
+      }
+
+      if (orderObj) {
+        const cod = orderObj.totalAmount || 0;
+        const fee = orderObj.shippingCost || 2000;
         const net = Math.max(0, cod - fee);
         totalCodFils += cod;
         totalDeliveryFeeFils += fee;
 
         batchOrders.push({
-          orderId: demo.id,
-          orderNumber: demo.reference,
-          customerName: demo.customerName,
-          customerPhone: demo.customerPhone,
-          city: demo.addressStreet ? demo.addressStreet.split('-')[0].trim() : 'عين الباشا',
-          address: [demo.addressStreet, demo.addressBuilding, demo.addressApartment].filter(Boolean).join('، '),
+          orderId: orderObj.id,
+          orderNumber: orderObj.reference,
+          customerName: orderObj.customerName,
+          customerPhone: orderObj.customerPhone,
+          city: (orderObj as any).city || 'عمّان',
+          address: orderObj.notes || 'العنوان مسجل',
           codAmountFils: cod,
           deliveryFeeFils: fee,
           netSettlementFils: net,
           status: 'SHIPPED'
         });
 
-        // Update order status to SHIPPED immediately upon batch creation
-        demo.status = 'SHIPPED';
-        demo.statusHistory.unshift({
-          id: `hist-batch-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-          orderId: demo.id,
-          status: 'SHIPPED',
-          notes: `تم تسليم الطلب ضمن طلبية الشحن #${cleanNum} لشركة التوصيل (${courierName})`,
-          createdAt: new Date().toISOString()
-        });
-
-        // Also add to deliveryOrders in settlements so it is tracked
-        if (!memoryStoreState.deliveryOrders) memoryStoreState.deliveryOrders = [];
-        if (!memoryStoreState.deliveryOrders.some(d => d.orderNumber === demo.reference)) {
-          memoryStoreState.deliveryOrders.unshift({
-            id: `del-${demo.id}`,
-            orderNumber: demo.reference,
-            companyName: courierName,
-            customerName: demo.customerName,
-            city: demo.addressStreet ? demo.addressStreet.split('-')[0].trim() : 'عين الباشا',
-            codAmountFils: cod,
-            deliveryFeeFils: fee,
-            netSettlementFils: net,
-            status: 'IN_TRANSIT',
-            date: new Date().toISOString().split('T')[0]
+        // Update in DB
+        try {
+          await prisma.order.update({
+            where: { id: orderId },
+            data: {
+              status: 'SHIPPED',
+              notes: notes ? `ضمن طلبية الشحن #${cleanNum} (${courierName}) | ${notes}` : `ضمن طلبية الشحن #${cleanNum} (${courierName})`
+            }
           });
-        }
+          await prisma.orderStatusHistory.create({
+            data: {
+              orderId,
+              status: 'SHIPPED',
+              notes: `تم تسليم الطلب لشركة التوصيل ${courierName} ضمن طلبية الشحن #${cleanNum}`
+            }
+          });
+        } catch (e) {}
       }
-
-      // Also try updating Prisma DB if reachable
-      try {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: {
-            status: 'SHIPPED',
-            notes: notes ? `ضمن طلبية الشحن #${cleanNum} (${courierName}) | ${notes}` : `ضمن طلبية الشحن #${cleanNum} (${courierName})`
-          }
-        });
-        await prisma.orderStatusHistory.create({
-          data: {
-            orderId,
-            status: 'SHIPPED',
-            notes: `تم تسليم الطلب لشركة التوصيل ${courierName} ضمن طلبية الشحن #${cleanNum}`
-          }
-        });
-      } catch (e) {}
     }
 
     const net = totalCodFils - totalDeliveryFeeFils;
@@ -1760,7 +1539,10 @@ export async function createCourierBatchAction(data: {
       notes: notes || ''
     };
 
-    memoryStoreState.courierBatches.unshift(newBatch);
+    batches.unshift(newBatch);
+    await saveCourierBatchesToDb(batches);
+
+    await saveCourierBatchesToDb(batches);
 
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/orders');
@@ -1779,11 +1561,9 @@ export async function updateCourierBatchStatusAction(data: {
 }) {
   try {
     const { batchId, newStatus, storeBearsDeliveryCost = false } = data;
-    if (!memoryStoreState.courierBatches) {
-      return { success: false, error: 'سجل طلبيات الشحن غير موجود' };
-    }
+    const batches = await getCourierBatchesFromDb();
 
-    const batch = memoryStoreState.courierBatches.find(b => b.id === batchId || b.batchNumber === batchId);
+    const batch = batches.find(b => b.id === batchId || b.batchNumber === batchId);
     if (!batch) {
       return { success: false, error: 'طلبية التوصيل غير موجودة' };
     }
@@ -1937,6 +1717,10 @@ export async function updateCourierBatchStatusAction(data: {
       }
     }
 
+    await saveCourierBatchesToDb(batches);
+
+    await saveCourierBatchesToDb(batches);
+
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/orders');
     revalidatePath('/admin/deliveries');
@@ -1958,11 +1742,9 @@ export async function cancelOrderInCourierBatchAction(data: {
 }) {
   try {
     const { batchId, orderId, storeBearsDeliveryCost, reason } = data;
-    if (!memoryStoreState.courierBatches) {
-      return { success: false, error: 'سجل طلبيات الشحن غير موجود' };
-    }
+    const batches = await getCourierBatchesFromDb();
 
-    const batch = memoryStoreState.courierBatches.find(b => b.id === batchId || b.batchNumber === batchId);
+    const batch = batches.find(b => b.id === batchId || b.batchNumber === batchId);
     if (!batch) {
       return { success: false, error: 'طلبية التوصيل غير موجودة' };
     }
@@ -2052,6 +1834,10 @@ export async function cancelOrderInCourierBatchAction(data: {
       }
     }
 
+    await saveCourierBatchesToDb(batches);
+
+    await saveCourierBatchesToDb(batches);
+
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/orders');
     revalidatePath('/admin/deliveries');
@@ -2080,11 +1866,9 @@ export async function cancelMultipleOrdersInCourierBatchAction(data: {
 }) {
   try {
     const { batchId, cancelledOrders } = data;
-    if (!memoryStoreState.courierBatches) {
-      return { success: false, error: 'سجل طلبيات الشحن غير موجود' };
-    }
+    const batches = await getCourierBatchesFromDb();
 
-    const batch = memoryStoreState.courierBatches.find(b => b.id === batchId || b.batchNumber === batchId);
+    const batch = batches.find(b => b.id === batchId || b.batchNumber === batchId);
     if (!batch) {
       return { success: false, error: 'طلبية التوصيل غير موجودة' };
     }
@@ -2184,6 +1968,8 @@ export async function cancelMultipleOrdersInCourierBatchAction(data: {
       batch.status = 'CANCELLED';
     }
 
+    await saveCourierBatchesToDb(batches);
+
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/orders');
     revalidatePath('/admin/deliveries');
@@ -2204,18 +1990,25 @@ export async function cancelMultipleOrdersInCourierBatchAction(data: {
 // ====================================================================
 
 export async function getCourierCompaniesAction(): Promise<CourierCompany[]> {
-  if (!memoryStoreState.courierCompanies) {
-    memoryStoreState.courierCompanies = [
-      { id: 'comp-1', name: 'سريعة إكسبرس', phone: '0791112233', type: 'COMPANY', active: true, isDefaultStoreCourier: true, defaultFeeFils: 2500, notes: 'الشركة المعتمدة الرئيسية للتوصيل لكافة محافظات المملكة', createdAt: '2026-01-01' },
-      { id: 'comp-2', name: 'أرامكس (Aramex)', phone: '065358899', type: 'COMPANY', active: true, isDefaultStoreCourier: false, defaultFeeFils: 3000, notes: 'شحنات المحافظات البعيدة والمستعجلة', createdAt: '2026-01-05' },
-      { id: 'comp-3', name: 'مندوب غزل الخاص (عين الباشا)', phone: '0795554433', type: 'DELEGATE', active: true, isDefaultStoreCourier: false, defaultFeeFils: 1500, notes: 'توصيل محلي فوري داخل لواء عين الباشا ومخيم البقعة', createdAt: '2026-01-10' }
+  const companies = await getCourierCompaniesFromDb();
+  if (companies.length === 0) {
+    const defaultShibli: CourierCompany[] = [
+      {
+        id: 'comp-shibli',
+        name: 'شبلي',
+        phone: '0790000000',
+        type: 'COMPANY',
+        active: true,
+        isDefaultStoreCourier: true,
+        defaultFeeFils: 2000,
+        notes: 'شركة التوصيل المعتمدة لجميع محافظات المملكة',
+        createdAt: new Date().toISOString()
+      }
     ];
+    await saveCourierCompaniesToDb(defaultShibli);
+    return defaultShibli;
   }
-  const hasDefault = memoryStoreState.courierCompanies.some(c => c.isDefaultStoreCourier);
-  if (!hasDefault && memoryStoreState.courierCompanies.length > 0) {
-    memoryStoreState.courierCompanies[0].isDefaultStoreCourier = true;
-  }
-  return memoryStoreState.courierCompanies;
+  return companies;
 }
 
 export async function setDefaultCourierCompanyAction(companyId: string) {
@@ -2231,7 +2024,7 @@ export async function setDefaultCourierCompanyAction(companyId: string) {
       }
     }
     if (!found) return { success: false, error: 'شركة التوصيل غير موجودة' };
-    (globalThis as any).__ghazal_courier_companies = list;
+    await saveCourierCompaniesToDb(list);
     (globalThis as any).__ghazal_default_courier_id = companyId;
     revalidatePath('/admin/deliveries');
     revalidatePath('/admin/settlements');
@@ -2278,14 +2071,14 @@ export async function saveCourierCompanyAction(data: {
         phone: data.phone.trim(),
         type: data.type,
         active: data.active ?? true,
-        defaultFeeFils: data.defaultFeeFils ?? 2500,
+        defaultFeeFils: data.defaultFeeFils ?? 2000,
         isDefaultStoreCourier: data.isDefaultStoreCourier ?? false,
         notes: data.notes?.trim(),
         createdAt: new Date().toISOString()
       };
       list.push(newComp);
     }
-    (globalThis as any).__ghazal_courier_companies = list;
+    await saveCourierCompaniesToDb(list);
     revalidatePath('/admin/deliveries');
     revalidatePath('/admin/settlements');
     return { success: true, companies: list };
@@ -2300,7 +2093,7 @@ export async function toggleCourierCompanyStatusAction(id: string) {
     const comp = list.find(c => c.id === id);
     if (!comp) return { success: false, error: 'شركة التوصيل غير موجودة' };
     comp.active = !comp.active;
-    (globalThis as any).__ghazal_courier_companies = list;
+    await saveCourierCompaniesToDb(list);
     revalidatePath('/admin/deliveries');
     revalidatePath('/admin/settlements');
     return { success: true, active: comp.active };
@@ -2311,9 +2104,9 @@ export async function toggleCourierCompanyStatusAction(id: string) {
 
 export async function deleteCourierCompanyAction(id: string) {
   try {
-    let list = await getCourierCompaniesAction();
-    memoryStoreState.courierCompanies = list.filter(c => c.id !== id);
-    (globalThis as any).__ghazal_courier_companies = memoryStoreState.courierCompanies;
+    const list = await getCourierCompaniesAction();
+    const filtered = list.filter(c => c.id !== id);
+    await saveCourierCompaniesToDb(filtered);
     revalidatePath('/admin/deliveries');
     revalidatePath('/admin/settlements');
     return { success: true };
@@ -2337,12 +2130,9 @@ export async function updateBatchOrderDeliveryStatusAction(data: {
 }) {
   try {
     const { batchId, orderId, newStatus, collectedCodFils, deliveryFeeFils, returnFeeFils, notes } = data;
+    const batches = await getCourierBatchesFromDb();
 
-    if (!memoryStoreState.courierBatches) {
-      return { success: false, error: 'سجل طلبيات الشحن غير موجود' };
-    }
-
-    const batch = memoryStoreState.courierBatches.find(b => b.id === batchId || b.batchNumber === batchId);
+    const batch = batches.find(b => b.id === batchId || b.batchNumber === batchId);
     if (!batch) {
       return { success: false, error: 'طلبية التوصيل غير موجودة' };
     }
@@ -2438,6 +2228,8 @@ export async function updateBatchOrderDeliveryStatusAction(data: {
 
     batch.updatedAt = new Date().toISOString();
 
+    await saveCourierBatchesToDb(batches);
+
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/deliveries');
     revalidatePath('/admin/orders');
@@ -2470,11 +2262,9 @@ export async function recordCourierBatchRemittancePaymentAction(data: {
       return { success: false, error: 'يرجى إدخال رقم إشعار أو وصل التحويل البنكي' };
     }
 
-    if (!memoryStoreState.courierBatches) {
-      return { success: false, error: 'سجل طلبيات الشحن غير موجود' };
-    }
+    const batches = await getCourierBatchesFromDb();
 
-    const batch = memoryStoreState.courierBatches.find(b => b.id === batchId || b.batchNumber === batchId);
+    const batch = batches.find(b => b.id === batchId || b.batchNumber === batchId);
     if (!batch) {
       return { success: false, error: 'طلبية التوصيل غير موجودة' };
     }
@@ -2521,6 +2311,8 @@ export async function recordCourierBatchRemittancePaymentAction(data: {
     }
 
     batch.updatedAt = new Date().toISOString();
+
+    await saveCourierBatchesToDb(batches);
 
     revalidatePath('/admin/settlements');
     revalidatePath('/admin/deliveries');

@@ -6,8 +6,18 @@ echo     محل غزل للمكياج والعناية — عين الباشا
 echo            تشغيل برنامج الكاشير (GHAZAL POS)
 echo ===================================================
 echo.
-echo جاري بدء تشغيل برنامج الكاشير المستقل...
+echo جاري بدء تشغيل برنامج الكاشير المستقل بسرعة فائقة...
 echo.
+
+if exist "%~dp0GHAZAL POS.exe" (
+    start "" "%~dp0GHAZAL POS.exe"
+    exit /b
+)
+
+if exist "%~dp0win-unpacked\GHAZAL POS.exe" (
+    start "" "%~dp0win-unpacked\GHAZAL POS.exe"
+    exit /b
+)
 
 if exist "%~dp0desktop\release\win-unpacked\GHAZAL POS.exe" (
     start "" "%~dp0desktop\release\win-unpacked\GHAZAL POS.exe"
@@ -19,7 +29,6 @@ if exist "%~dp0public\downloads\GHAZAL-POS-Setup.exe" (
     exit /b
 )
 
-echo لم يتم العثور على ملف EXE، جاري التشغيل عبر Electron...
-cd "%~dp0desktop"
-pnpm start
-pause
+echo جاري فتح نقطة البيع السحابية عبر المتصفح الافتراضي...
+start "" "https://ghazal-store-jo.netlify.app/pos/cashier"
+exit /b
