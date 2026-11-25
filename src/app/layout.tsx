@@ -1,21 +1,5 @@
 import type { Metadata } from "next";
-import { Cairo, Tajawal } from "next/font/google";
 import "./globals.css";
-
-const cairo = Cairo({
-  subsets: ["arabic"],
-  variable: "--font-cairo",
-  weight: ["400", "600", "700"],
-  display: 'swap',
-});
-
-const tajawal = Tajawal({
-  subsets: ["arabic"],
-  variable: "--font-tajawal",
-  weight: ["400", "500", "700"],
-  display: 'swap',
-  preload: false,
-});
 
 const BASE_URL = 'https://ghazal.jo';
 
@@ -120,13 +104,16 @@ export default function RootLayout({
       lang="ar" 
       dir="rtl" 
       suppressHydrationWarning
-      className={`light ${cairo.variable} ${tajawal.variable}`} 
+      className="light" 
       style={{ colorScheme: 'only light', backgroundColor: '#ffffff' }}
     >
       <head>
         <meta name="color-scheme" content="only light" />
         <meta name="theme-color" content="#ffffff" />
         <meta name="supported-color-schemes" content="light" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />

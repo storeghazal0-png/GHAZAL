@@ -10,6 +10,8 @@
   --color-ivory-100: #FFFFFF;
   --color-ivory-200: #F9FAFB;
   --color-charcoal-900: #1A1A1A;
+  --font-cairo: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-tajawal: 'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 html, body {
