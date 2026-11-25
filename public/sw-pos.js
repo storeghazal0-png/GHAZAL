@@ -3,7 +3,7 @@
  * Keeps the POS cashier interface operational even without internet connection.
  */
 
-const CACHE_NAME = 'ghazal-pos-cache-v2';
+const CACHE_NAME = 'ghazal-pos-cache-v3';
 
 // Essential assets to cache for offline operation
 const PRECACHE_ASSETS = [
