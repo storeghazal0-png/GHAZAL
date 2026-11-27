@@ -16,7 +16,13 @@ import {
 } from '@/components/CategoryIcons';
 
 interface ShopFiltersProps {
-  categories?: { id: string; name: string; slug?: string }[];
+  categories?: {
+    id: string;
+    name: string;
+    slug?: string;
+    parentId?: string | null;
+    children?: { id: string; name: string; slug?: string; parentId?: string | null }[];
+  }[];
   genders?: { id: string; name: string }[];
   families?: { id: string; name: string }[];
   initialMinPrice?: number;
@@ -27,6 +33,7 @@ interface ShopFiltersProps {
 }
 
 export function ShopFilters({ 
+  categories = [],
   initialCategory = '',
 }: ShopFiltersProps) {
   const router = useRouter();
@@ -46,7 +53,36 @@ export function ShopFilters({
     setSearchQuery(urlQ);
   }, [urlQ]);
 
-  // The 7 Official Ghazal Categories + All option matching homepage exactly
+  // Use the same active ONLINE/SHARED categories supplied by /shop and the
+  // categories page, instead of maintaining a second hard-coded list here.
+  const categoryIcons: Record<string, React.ComponentType<any>> = {
+    fragrances: PerfumeIcon,
+    perfumes: PerfumeIcon,
+    haircare: HaircareIcon,
+    skincare: SkincareIcon,
+    'face-care': FaceCareIcon,
+    deodorants: DeodorantsIcon,
+    makeup: MakeupIcon,
+    accessories: AccessoriesIcon,
+    'beauty-tools': ToolsIcon,
+    tools: ToolsIcon,
+  };
+
+  const rootCategories = categories.filter((category) => !category.parentId);
+  const dynamicCategories = rootCategories
+    .filter((category) => !['offers', 'offers-gifts', 'old-cash-category'].includes((category.slug || category.id).toLowerCase()))
+    .map((category) => {
+      const categoryParam = (category.slug || category.id).toLowerCase();
+      return {
+        id: category.id,
+        name: category.name,
+        icon: categoryIcons[categoryParam] || ((props: any) => <Sparkles className="text-[#E6007E] stroke-[1.75]" {...props} />),
+        categoryParam,
+        filterParam: '',
+        matches: urlCategory === categoryParam || (categoryParam === 'fragrances' && urlCategory === 'perfumes') || (categoryParam === 'beauty-tools' && urlCategory === 'tools'),
+      };
+    });
+
   const CIRCULAR_CATEGORIES = [
     {
       id: 'all',
@@ -54,81 +90,27 @@ export function ShopFilters({
       icon: (props: any) => <Sparkles className="text-[#E6007E] stroke-[1.75]" {...props} />,
       categoryParam: '',
       filterParam: '',
-      matches: !urlCategory && !urlFilter
+      matches: !urlCategory && !urlFilter,
     },
-    {
-      id: 'perfumes',
-      name: 'العطور',
-      icon: PerfumeIcon,
-      categoryParam: 'perfumes',
-      filterParam: '',
-      matches: urlCategory === 'perfumes' || urlCategory === 'fragrances'
-    },
-    {
-      id: 'haircare',
-      name: 'العناية بالشعر',
-      icon: HaircareIcon,
-      categoryParam: 'haircare',
-      filterParam: '',
-      matches: urlCategory === 'haircare'
-    },
-    {
-      id: 'skincare',
-      name: 'العناية بالبشرة',
-      icon: SkincareIcon,
-      categoryParam: 'skincare',
-      filterParam: '',
-      matches: urlCategory === 'skincare'
-    },
-    {
-      id: 'face-care',
-      name: 'العناية بالوجه',
-      icon: FaceCareIcon,
-      categoryParam: 'face-care',
-      filterParam: '',
-      matches: urlCategory === 'face-care'
-    },
-    {
-      id: 'deodorants',
-      name: 'مزيلات عرق',
-      icon: DeodorantsIcon,
-      categoryParam: 'deodorants',
-      filterParam: '',
-      matches: urlCategory === 'deodorants'
-    },
-    {
-      id: 'makeup',
-      name: 'المكياج',
-      icon: MakeupIcon,
-      categoryParam: 'makeup',
-      filterParam: '',
-      matches: urlCategory === 'makeup'
-    },
-    {
-      id: 'accessories',
-      name: 'الإكسسوارات',
-      icon: AccessoriesIcon,
-      categoryParam: 'accessories',
-      filterParam: '',
-      matches: urlCategory === 'accessories'
-    },
-    {
-      id: 'tools',
-      name: 'أدوات التجميل',
-      icon: ToolsIcon,
-      categoryParam: 'tools',
-      filterParam: '',
-      matches: urlCategory === 'tools' || urlCategory === 'beauty-tools'
-    },
+    ...dynamicCategories,
     {
       id: 'offers',
       name: 'هدايا وعروض',
       icon: OffersIcon,
       categoryParam: '',
       filterParam: 'offers',
-      matches: urlFilter === 'offers'
+      matches: urlFilter === 'offers',
     },
   ];
+
+  const selectedRoot = rootCategories.find((category) => {
+    const rootSlug = (category.slug || category.id).toLowerCase();
+    return urlCategory === rootSlug || urlCategory === category.id.toLowerCase() ||
+      (category.children || []).some((child) => urlCategory === (child.slug || child.id).toLowerCase());
+  });
+  const selectedRootChildren = (selectedRoot?.children || [])
+    .filter((child) => child.slug !== 'old-cash-category')
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
 
   const updateFilters = useCallback((newQ: string, newCat?: string, newFilter?: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -263,6 +245,45 @@ export function ShopFilters({
             );
           })}
         </div>
+
+        {selectedRootChildren.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-pink-100">
+            <p className="text-xs font-extrabold text-zinc-700 mb-2 text-center">
+              الأقسام الفرعية
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSelectCategory({ id: selectedRoot!.id, name: selectedRoot!.name, icon: Sparkles, categoryParam: selectedRoot!.slug || selectedRoot!.id, filterParam: '', matches: false })}
+                className={`px-3 py-1.5 rounded-full border text-xs font-bold transition-colors ${
+                  urlCategory === (selectedRoot?.slug || selectedRoot?.id || '').toLowerCase()
+                    ? 'bg-[#E6007E] text-white border-[#E6007E]'
+                    : 'bg-white text-zinc-700 border-pink-200 hover:border-[#E6007E] hover:text-[#E6007E]'
+                }`}
+              >
+                كل {selectedRoot?.name}
+              </button>
+              {selectedRootChildren.map((child) => {
+                const childParam = (child.slug || child.id).toLowerCase();
+                const isSelected = urlCategory === childParam;
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => updateFilters(searchQuery, childParam, '')}
+                    className={`px-3 py-1.5 rounded-full border text-xs font-bold transition-colors ${
+                      isSelected
+                        ? 'bg-[#E6007E] text-white border-[#E6007E]'
+                        : 'bg-white text-zinc-700 border-pink-200 hover:border-[#E6007E] hover:text-[#E6007E]'
+                    }`}
+                  >
+                    {child.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* -------------------------------------------------------------

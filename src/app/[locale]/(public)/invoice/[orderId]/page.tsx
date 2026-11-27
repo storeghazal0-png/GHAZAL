@@ -466,7 +466,17 @@ export default async function InvoicePage({ params }: { params: Promise<{ orderI
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-zinc-500">{item.size ? `${item.size} - ` : ''}SKU: {item.sku}</p>
+                          {(item.colorName || item.shade) && (
+                            <div className="my-1 flex items-center gap-1.5">
+                              <span className="text-[11px] font-bold px-2 py-0.5 bg-pink-50 border border-pink-200 text-[#E6007E] rounded-md">
+                                {item.colorName ? `الرائحة / الخيار: ${item.colorName}` : ''} {item.shade ? `(الدرجة: ${item.shade})` : ''}
+                              </span>
+                            </div>
+                          )}
+                          <p className="text-xs text-zinc-500">
+                            {item.size ? `${item.size} - ` : ''}
+                            {item.barcode ? `باركود: ${item.barcode}` : `SKU: ${item.sku}`}
+                          </p>
                         </div>
                       </div>
                     </td>

@@ -80,30 +80,44 @@ export default function CartPage({ params }: { params: Promise<{ locale: string 
                   key={item.sku} 
                   className="bg-white p-6 rounded-lg border border-[var(--color-ivory-200)] shadow-sm flex gap-6"
                 >
-                  <div className="w-20 h-20 bg-[var(--color-ivory-200)] rounded-md flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  <div className="w-20 h-20 bg-zinc-50 rounded-xl border border-zinc-200 flex-shrink-0 flex items-center justify-center overflow-hidden p-1">
                     {item.image ? (
-                      <div 
-                        className="w-full h-full bg-contain bg-center bg-no-repeat" 
-                        style={{ backgroundImage: `url(${item.image.startsWith('local://') ? '/product-placeholder.png' : item.image})` }} 
+                      <img 
+                        src={item.image.startsWith('local://') ? '/product-placeholder.png' : item.image}
+                        alt={item.name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
                       />
-                    ) : 'صورة العطر'}
+                    ) : (
+                      <img src="/logo.png" alt="Ghazal" className="w-10 h-10 object-contain opacity-50" />
+                    )}
                   </div>
 
                   <div className="flex-1">
-                    <div className="flex justify-between mb-2">
-                      <h3 className="font-bold text-lg text-[var(--color-charcoal-900)]">
+                    <div className="flex justify-between mb-1.5">
+                      <h3 className="font-bold text-base sm:text-lg text-[var(--color-charcoal-900)]">
                         {item.name}
                       </h3>
                       <button 
                         onClick={() => removeFromCart(item.sku)}
-                        className="text-red-500 hover:text-red-700 text-sm"
+                        className="text-red-500 hover:text-red-700 text-xs sm:text-sm font-bold"
                       >
                         {isAr ? 'إزالة' : 'Remove'}
                       </button>
                     </div>
 
-                    <div className="text-sm text-zinc-500 mb-4">
-                      {item.size} {item.stockStatus === 'UNVERIFIED' && (
+                    <div className="text-xs text-zinc-600 mb-3 space-y-1">
+                      {(item.variantLabel || item.colorName || item.scent || item.shade || item.size) && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-pink-50 border border-pink-200 text-[#E6007E] font-bold text-xs">
+                          <span>{item.variantLabel || [item.scent ? `رائحة: ${item.scent}` : null, item.shade ? `درجة: ${item.shade}` : null, item.colorName, item.size].filter(Boolean).join(' - ')}</span>
+                        </div>
+                      )}
+                      {item.barcode && (
+                        <div className="text-[11px] font-mono text-zinc-400">
+                          باركود: {item.barcode}
+                        </div>
+                      )}
+                      {item.stockStatus === 'UNVERIFIED' && (
                         <span className="text-amber-600 font-bold block text-xs mt-1">
                           {isAr ? 'بانتظار تأكيد التوفر' : 'Pending verification'}
                         </span>

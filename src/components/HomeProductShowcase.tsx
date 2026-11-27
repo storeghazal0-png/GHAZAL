@@ -20,6 +20,7 @@ export interface ShowcaseProduct {
   shade?: string;
   tag?: string;
   imageUrl: string;
+  variantCount?: number;
 }
 
 interface HomeProductShowcaseProps {
@@ -278,6 +279,12 @@ function ProductCardItem({
             {isAr ? prod.nameAr : (prod.nameEn || prod.nameAr)}
           </h3>
         </Link>
+
+        {(prod.variantCount || 0) > 1 && (
+          <p className="text-[10px] sm:text-xs text-[#E6007E] font-bold mb-2">
+            {isAr ? 'يتوفر بعدة خيارات' : 'Available in multiple options'}
+          </p>
+        )}
 
         {prod.shade && (
           <p className="text-[9px] sm:text-[10px] text-zinc-500 font-mono mb-2 truncate">

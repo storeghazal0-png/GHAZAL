@@ -61,8 +61,7 @@ export function AdminSidebar({ employeeName, roleName = 'ADMIN' }: AdminSidebarP
       items: [
         { href: '/admin/orders', label: 'طلبات المتجر الإلكتروني', icon: ShoppingBag },
         { href: '/admin/deliveries', label: 'طلبيات وشحنات التوصيل', icon: Truck },
-        { href: '/admin/promotions', label: 'العروض الترويجية والخصومات', icon: Tag },
-        { href: '/admin/rewards', label: 'مكافآت السلة والهدايا', icon: Gift },
+        { href: '/admin/rewards', label: 'العروض والمكافآت والخصومات', icon: Gift },
         { href: '/admin/customers', label: 'سجل الزبائن والعملاء', icon: Users },
       ]
     },

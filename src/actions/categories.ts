@@ -11,22 +11,27 @@ export interface SyncedCategory {
   name: string;
   slug: string;
   imagePath?: string;
+  channel?: 'ONLINE' | 'POS' | 'SHARED';
+  isActive?: boolean;
   sortOrder?: number;
   parentId?: string | null;
   parentName?: string | null;
   children?: SyncedCategory[];
+  onlineCount?: number;
+  posCount?: number;
+  sharedCount?: number;
   _count?: { products: number };
 }
 
 const DEFAULT_STORE_CATEGORIES: SyncedCategory[] = [
-  { id: 'cat-makeup', name: 'المكياج ومستحضرات التجميل', slug: 'makeup', imagePath: '/logo.png', sortOrder: 1 },
-  { id: 'cat-skincare', name: 'العناية بالبشرة', slug: 'skincare', imagePath: '/logo.png', sortOrder: 2 },
-  { id: 'cat-face-care', name: 'العناية بالوجه', slug: 'face-care', imagePath: '/logo.png', sortOrder: 3 },
-  { id: 'cat-deodorants', name: 'مزيلات عرق', slug: 'deodorants', imagePath: '/logo.png', sortOrder: 4 },
-  { id: 'cat-haircare', name: 'العناية بالشعر', slug: 'haircare', imagePath: '/logo.png', sortOrder: 5 },
-  { id: 'cat-fragrances', name: 'العطور الفاخرة', slug: 'fragrances', imagePath: '/logo.png', sortOrder: 6 },
-  { id: 'cat-beauty-tools', name: 'أدوات التجميل والفرش', slug: 'beauty-tools', imagePath: '/logo.png', sortOrder: 7 },
-  { id: 'cat-accessories', name: 'الإكسسوارات والهدايا', slug: 'accessories', imagePath: '/logo.png', sortOrder: 8 },
+  { id: 'cat-makeup', name: 'المكياج ومستحضرات التجميل', slug: 'makeup', imagePath: '/logo.png', sortOrder: 1, channel: 'SHARED' },
+  { id: 'cat-skincare', name: 'العناية بالبشرة', slug: 'skincare', imagePath: '/logo.png', sortOrder: 2, channel: 'SHARED' },
+  { id: 'cat-face-care', name: 'العناية بالوجه', slug: 'face-care', imagePath: '/logo.png', sortOrder: 3, channel: 'SHARED' },
+  { id: 'cat-deodorants', name: 'مزيلات عرق', slug: 'deodorants', imagePath: '/logo.png', sortOrder: 4, channel: 'SHARED' },
+  { id: 'cat-haircare', name: 'العناية بالشعر', slug: 'haircare', imagePath: '/logo.png', sortOrder: 5, channel: 'SHARED' },
+  { id: 'cat-fragrances', name: 'العطور الفاخرة', slug: 'fragrances', imagePath: '/logo.png', sortOrder: 6, channel: 'SHARED' },
+  { id: 'cat-beauty-tools', name: 'أدوات التجميل والفرش', slug: 'beauty-tools', imagePath: '/logo.png', sortOrder: 7, channel: 'SHARED' },
+  { id: 'cat-accessories', name: 'الإكسسوارات والهدايا', slug: 'accessories', imagePath: '/logo.png', sortOrder: 8, channel: 'SHARED' },
 ];
 
 // In-memory runtime categories store (ensures offline and fallback resilience)
@@ -40,20 +45,39 @@ export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
 
   // 1. Try fetching from database
   try {
-    let dbCats = await prisma.category.findMany({
-      orderBy: [
-        { sortOrder: 'asc' },
-        { name: 'asc' }
-      ],
-      include: {
-        parent: { select: { id: true, name: true } },
-        children: {
-          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          include: { _count: { select: { products: true } } }
-        },
-        _count: { select: { products: true } }
+    const [dbCats, groupedProductCounts] = await Promise.all([
+      prisma.category.findMany({
+        orderBy: [
+          { sortOrder: 'asc' },
+          { name: 'asc' }
+        ],
+        include: {
+          parent: { select: { id: true, name: true } },
+          children: {
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            include: { _count: { select: { products: true } } }
+          },
+          _count: { select: { products: true } }
+        }
+      }),
+      prisma.product.groupBy({
+        by: ['categoryId', 'channel'],
+        _count: { _all: true }
+      }).catch(() => [])
+    ]);
+
+    // Build channel product lookup map
+    const countsByCatAndChannel: Record<string, { online: number; pos: number; shared: number }> = {};
+    for (const row of (groupedProductCounts as any[])) {
+      if (!row.categoryId) continue;
+      if (!countsByCatAndChannel[row.categoryId]) {
+        countsByCatAndChannel[row.categoryId] = { online: 0, pos: 0, shared: 0 };
       }
-    });
+      const ch = (row.channel || 'POS').toUpperCase();
+      if (ch === 'ONLINE') countsByCatAndChannel[row.categoryId].online += row._count._all;
+      else if (ch === 'SHARED') countsByCatAndChannel[row.categoryId].shared += row._count._all;
+      else countsByCatAndChannel[row.categoryId].pos += row._count._all;
+    }
 
     // Auto-seed required categories if missing: "العناية بالوجه" and "مزيلات عرق"
     const requiredCats = [
@@ -83,77 +107,86 @@ export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
     }
 
     if (dbCats && dbCats.length > 0) {
-      categories = dbCats.map(c => ({
-        id: c.id,
-        name: c.name,
-        slug: c.slug,
-        imagePath: c.imagePath || '/logo.png',
-        sortOrder: c.sortOrder ?? 0,
-        parentId: c.parentId,
-        parentName: c.parent?.name || null,
-        children: (c.children || []).map(ch => ({
-          id: ch.id,
-          name: ch.name,
-          slug: ch.slug,
-          imagePath: ch.imagePath || '/logo.png',
-          sortOrder: ch.sortOrder ?? 0,
-          parentId: ch.parentId,
-          _count: ch._count
-        })),
-        _count: c._count
-      }));
+      categories = dbCats.map(c => {
+        const catChannel = ((c as any).channel as 'ONLINE' | 'POS' | 'SHARED') || 'SHARED';
+        const stats = countsByCatAndChannel[c.id] || { online: 0, pos: 0, shared: 0 };
+        
+        // Exact product count according to category channel rule:
+        // - ONLINE: products with channel ONLINE or SHARED
+        // - POS: products with channel POS or SHARED
+        // - SHARED: products with channel SHARED
+        let relevantCount = 0;
+        if (catChannel === 'ONLINE') {
+          relevantCount = stats.online + stats.shared;
+        } else if (catChannel === 'POS') {
+          relevantCount = stats.pos + stats.shared;
+        } else {
+          relevantCount = stats.shared;
+        }
+
+        return {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          imagePath: c.imagePath || '/logo.png',
+          channel: catChannel,
+          isActive: c.isActive !== false,
+          sortOrder: c.sortOrder ?? 0,
+          parentId: c.parentId,
+          parentName: c.parent?.name || null,
+          onlineCount: stats.online + stats.shared,
+          posCount: stats.pos,
+          sharedCount: stats.shared,
+          children: (c.children || []).map(ch => {
+            const subChannel = ((ch as any).channel as 'ONLINE' | 'POS' | 'SHARED') || catChannel;
+            const subStats = countsByCatAndChannel[ch.id] || { online: 0, pos: 0, shared: 0 };
+            let subRelevantCount = 0;
+            if (subChannel === 'ONLINE') {
+              subRelevantCount = subStats.online + subStats.shared;
+            } else if (subChannel === 'POS') {
+              subRelevantCount = subStats.pos + subStats.shared;
+            } else {
+              subRelevantCount = subStats.shared;
+            }
+            return {
+              id: ch.id,
+              name: ch.name,
+              slug: ch.slug,
+              imagePath: ch.imagePath || '/logo.png',
+              channel: subChannel,
+              isActive: ch.isActive !== false,
+              sortOrder: ch.sortOrder ?? 0,
+              parentId: ch.parentId,
+              onlineCount: subStats.online + subStats.shared,
+              posCount: subStats.pos,
+              sharedCount: subStats.shared,
+              _count: { products: subRelevantCount }
+            };
+          }),
+          _count: { products: relevantCount }
+        };
+      });
+
+      // Database returned categories directly from PostgreSQL - return immediately!
+      return categories;
     }
   } catch (err) {
-    // DB offline fallback
+    console.warn('DB categories query failed:', err);
   }
 
-  // 2. Try fetching from siteSettings if DB was empty
-  if (categories.length === 0) {
-    try {
-      const setting = await prisma.siteSettings.findUnique({
-        where: { key: 'store_custom_categories' }
-      });
-      if (setting?.value) {
-        const parsed = JSON.parse(setting.value);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          categories = parsed;
-        }
-      }
-    } catch {}
-  }
-
-  // 3. Fallback to in-memory store
-  if (categories.length === 0) {
-    categories = [...inMemoryCategories];
-  } else {
-    // Merge any missing default categories
-    for (const defCat of inMemoryCategories) {
-      if (!categories.some(c => c.id === defCat.id || c.name === defCat.name)) {
-        categories.push(defCat);
-      }
-    }
-  }
-
-  // 4. Attach live product counts from COSMETICS_CATALOG
-  return categories.map(cat => {
-    const catalogCount = COSMETICS_CATALOG.filter(p => p.categoryId === cat.id).length;
-    const currentCount = cat._count?.products ?? 0;
-    return {
-      ...cat,
-      _count: {
-        products: Math.max(currentCount, catalogCount)
-      }
-    };
-  });
+  return categories;
 }
 
-async function persistCategoriesToSiteSettings(cats: SyncedCategory[]) {
+function revalidateCategoryPaths() {
   try {
-    await prisma.siteSettings.upsert({
-      where: { key: 'store_custom_categories' },
-      update: { value: JSON.stringify(cats) },
-      create: { key: 'store_custom_categories', value: JSON.stringify(cats) }
-    });
+    revalidatePath('/admin/categories');
+    revalidatePath('/admin/products');
+    revalidatePath('/admin/products/new');
+    revalidatePath('/ar');
+    revalidatePath('/ar/shop');
+    revalidatePath('/[locale]', 'layout');
+    revalidatePath('/[locale]/shop', 'page');
+    revalidatePath('/pos/cashier');
   } catch {}
 }
 
@@ -198,12 +231,8 @@ export async function reorderCategoriesAction(orderedIds: string[], parentId?: s
 
     // Refresh in-memory list sorting
     inMemoryCategories.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-    await persistCategoriesToSiteSettings(inMemoryCategories);
 
-    revalidatePath('/admin/categories');
-    revalidatePath('/admin/products');
-    revalidatePath('/ar/shop');
-    revalidatePath('/pos/cashier');
+    revalidateCategoryPaths();
 
     return { success: true };
   } catch (error: any) {
@@ -254,6 +283,9 @@ export async function createCategory(formData: FormData) {
       imagePath = await saveUploadedImage(imageFile);
     }
 
+    const rawChannel = (formData.get('channel') as string) || 'SHARED';
+    const channel: 'ONLINE' | 'POS' | 'SHARED' = (rawChannel === 'ONLINE' || rawChannel === 'POS' || rawChannel === 'SHARED') ? rawChannel : 'SHARED';
+
     let categoryId = `cat-${Date.now()}`;
     const nextSortOrder = inMemoryCategories.length + 1;
 
@@ -264,6 +296,7 @@ export async function createCategory(formData: FormData) {
           name: cleanName,
           slug,
           imagePath,
+          channel,
           parentId,
           sortOrder: nextSortOrder
         }
@@ -288,19 +321,15 @@ export async function createCategory(formData: FormData) {
       name: cleanName,
       slug,
       imagePath,
+      channel,
       parentId,
       parentName,
       sortOrder: nextSortOrder,
       _count: { products: 0 }
     };
     inMemoryCategories.push(newCat);
-    await persistCategoriesToSiteSettings(inMemoryCategories);
 
-    revalidatePath('/admin/categories');
-    revalidatePath('/admin/products');
-    revalidatePath('/admin/products/new');
-    revalidatePath('/ar/shop');
-    revalidatePath('/pos/cashier');
+    revalidateCategoryPaths();
 
     return { success: true, categoryId };
   } catch (error: any) {
@@ -354,6 +383,11 @@ export async function updateCategory(id: string, formData: FormData) {
       data.imagePath = await saveUploadedImage(imageFile);
     }
 
+    const rawChannel = formData.get('channel') as string;
+    if (rawChannel && (rawChannel === 'ONLINE' || rawChannel === 'POS' || rawChannel === 'SHARED')) {
+      data.channel = rawChannel;
+    }
+
     // 1. Try DB update
     try {
       await prisma.category.update({
@@ -370,38 +404,86 @@ export async function updateCategory(id: string, formData: FormData) {
       }
     } catch (e: any) {
       if (e?.message?.includes('لا يمكن')) throw e;
-      console.warn('Prisma updateCategory offline fallback');
+      await prisma.category.updateMany({
+        where: { OR: [{ id }, { slug: id }] },
+        data
+      });
     }
 
-    // 2. Synchronize in-memory and catalog
-    const memIdx = inMemoryCategories.findIndex(c => c.id === id);
-    if (memIdx >= 0) {
-      inMemoryCategories[memIdx].name = cleanName;
-      if (data.imagePath) inMemoryCategories[memIdx].imagePath = data.imagePath;
-      if (data.parentId !== undefined) {
-        inMemoryCategories[memIdx].parentId = data.parentId;
-        inMemoryCategories[memIdx].parentName = parentName;
-      }
-    }
-    await persistCategoriesToSiteSettings(inMemoryCategories);
-
-    // Sync COSMETICS_CATALOG
-    for (const prod of COSMETICS_CATALOG) {
-      if (prod.categoryId === id) {
-        prod.categoryName = cleanName;
-      }
-    }
-
-    revalidatePath('/admin/categories');
-    revalidatePath('/admin/products');
-    revalidatePath('/admin/products/new');
-    revalidatePath('/ar/shop');
-    revalidatePath('/pos/cashier');
+    revalidateCategoryPaths();
 
     return { success: true };
   } catch (error: any) {
     console.error('Error updating category:', error);
     return { success: false, error: error.message || 'حدث خطأ غير معروف' };
+  }
+}
+
+/**
+ * Quick update category channel (ONLINE | POS | SHARED)
+ */
+export async function updateCategoryChannelAction(id: string, channel: 'ONLINE' | 'POS' | 'SHARED') {
+  await requirePermission('manage:products');
+
+  try {
+    let updated = false;
+    try {
+      await prisma.category.update({
+        where: { id },
+        data: { channel }
+      });
+      updated = true;
+    } catch {
+      // Fallback: try update by slug
+      const res = await prisma.category.updateMany({
+        where: { OR: [{ id }, { slug: id }] },
+        data: { channel }
+      });
+      if (res.count > 0) updated = true;
+    }
+
+    if (!updated) {
+      throw new Error(`تعذر العثور على القسم برقم: ${id}`);
+    }
+
+    revalidateCategoryPaths();
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating category channel:', error);
+    return { success: false, error: error.message || 'فشل تحديث تصنيف القسم' };
+  }
+}
+
+/**
+ * Toggle category active status (نشط / معطل) in database
+ */
+export async function toggleCategoryStatusAction(id: string) {
+  await requirePermission('manage:products');
+
+  try {
+    const existing = await prisma.category.findFirst({
+      where: { OR: [{ id }, { slug: id }] },
+      select: { id: true, isActive: true }
+    });
+
+    if (!existing) {
+      throw new Error('القسم غير موجود في قاعدة البيانات');
+    }
+
+    const newStatus = !existing.isActive;
+
+    await prisma.category.update({
+      where: { id: existing.id },
+      data: { isActive: newStatus }
+    });
+
+    revalidateCategoryPaths();
+
+    return { success: true, isActive: newStatus };
+  } catch (error: any) {
+    console.error('Error toggling category status:', error);
+    return { success: false, error: error.message || 'فشل تغيير حالة القسم' };
   }
 }
 
@@ -443,7 +525,6 @@ export async function deleteCategory(id: string, deleteProducts: boolean, fallba
     if (memIdx >= 0) {
       inMemoryCategories.splice(memIdx, 1);
     }
-    await persistCategoriesToSiteSettings(inMemoryCategories);
 
     // Sync COSMETICS_CATALOG
     const fallbackId = fallbackCategoryId || 'cat-makeup';
@@ -458,11 +539,7 @@ export async function deleteCategory(id: string, deleteProducts: boolean, fallba
       }
     }
 
-    revalidatePath('/admin/categories');
-    revalidatePath('/admin/products');
-    revalidatePath('/admin/products/new');
-    revalidatePath('/ar/shop');
-    revalidatePath('/pos/cashier');
+    revalidateCategoryPaths();
 
     return { success: true };
   } catch (error: any) {

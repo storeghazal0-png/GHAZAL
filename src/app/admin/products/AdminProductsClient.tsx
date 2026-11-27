@@ -52,6 +52,16 @@ export function AdminProductsClient({
     else setActiveChannelTab('ALL');
   }, [searchParams]);
 
+  // Category filter state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(() => {
+    return searchParams?.get('category') || '';
+  });
+
+  useEffect(() => {
+    const cat = searchParams?.get('category') || '';
+    setSelectedCategoryId(cat);
+  }, [searchParams]);
+
   // Barcode Scanner Modal State for Phone / Camera
   const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const [isSearchingBarcode, setIsSearchingBarcode] = useState(false);
@@ -62,10 +72,10 @@ export function AdminProductsClient({
   const PAGE_SIZE = 30;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  // Reset pagination on search or channel tab change
+  // Reset pagination on search, channel tab, or category change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, activeChannelTab]);
+  }, [search, activeChannelTab, selectedCategoryId]);
 
   // Exact Channel product counts
   const totalCount = productList.length;
@@ -100,6 +110,10 @@ export function AdminProductsClient({
       list = list.filter(p => p.channel === 'POS' || (!p.channel && !p.isVisible));
     } else if (activeChannelTab === 'SHARED') {
       list = list.filter(p => p.channel === 'SHARED');
+    }
+
+    if (selectedCategoryId) {
+      list = list.filter(p => p.categoryId === selectedCategoryId || p.category?.id === selectedCategoryId || p.category?.slug === selectedCategoryId);
     }
 
     if (!search.trim()) return list;
@@ -297,7 +311,7 @@ export function AdminProductsClient({
             التحكم المباشر بالعرض في المتجر والكاشير، الدرجات، الباركود، والأسعار • عرض {displayedProducts.length} من {filteredProducts.length} منتج (إجمالي النظام: {productList.length})
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto items-stretch sm:items-center">
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto items-stretch sm:items-center flex-wrap">
           <div className="relative">
             <Search className="w-4 h-4 text-zinc-400 absolute start-3 top-3" />
             <input 
@@ -308,6 +322,52 @@ export function AdminProductsClient({
               className="border border-zinc-300 rounded-xl ps-9 pe-4 py-2 text-sm focus:outline-none focus:border-[#E6007E] w-full sm:w-64 bg-white"
             />
           </div>
+
+          {/* فلتر الأقسام */}
+          <div className="relative">
+            <select
+              value={selectedCategoryId}
+              onChange={e => {
+                const val = e.target.value;
+                setSelectedCategoryId(val);
+                const url = new URL(window.location.href);
+                if (val) url.searchParams.set('category', val);
+                else url.searchParams.delete('category');
+                window.history.pushState({}, '', url.toString());
+              }}
+              className={`border rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer transition ${
+                selectedCategoryId 
+                  ? 'border-[#E6007E] bg-pink-50 text-[#E6007E]' 
+                  : 'border-zinc-300 bg-white text-zinc-700 focus:border-[#E6007E]'
+              }`}
+            >
+              <option value="">جميع الأقسام ({categories.length})</option>
+              {categories.map(c => {
+                const badge = c.channel === 'ONLINE' ? '🌐 متجر' : c.channel === 'POS' ? '🏪 كاش' : '🔄 مشترك';
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({badge})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {selectedCategoryId && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategoryId('');
+                const url = new URL(window.location.href);
+                url.searchParams.delete('category');
+                window.history.pushState({}, '', url.toString());
+              }}
+              className="text-xs text-rose-600 hover:underline font-bold px-1"
+              title="إلغاء فلترة القسم"
+            >
+              إلغاء فلتر القسم ✕
+            </button>
+          )}
 
           {/* زر مسح الباركود بالكاميرا للهاتف والكمبيوتر */}
           <button

@@ -6,6 +6,7 @@ import type { Metadata } from 'next';
 import { Sparkles, ShoppingBag, Star, ArrowLeft, ArrowRight, ShieldCheck, Truck, RefreshCw, Heart } from 'lucide-react';
 import { HeroCarousel } from '@/components/HeroCarousel';
 import { getHeroSlides, getHeroCarouselSettings } from '@/actions/homepage-cms';
+import { getSynchronizedCategories } from '@/actions/categories';
 import { HomeProductShowcase } from '@/components/HomeProductShowcase';
 import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { getActivePromotions, findActivePromotionForProduct, computeProductPromotionPricing } from '@/lib/promotions';
@@ -17,14 +18,17 @@ import {
   MakeupIcon,
   AccessoriesIcon,
   ToolsIcon,
-  OffersIcon
+  OffersIcon,
+  FaceCareIcon,
+  DeodorantsIcon,
 } from '@/components/CategoryIcons';
 
 interface Params {
   locale?: string;
 }
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { locale = 'ar' } = await params;
@@ -93,15 +97,60 @@ export default async function StoreFrontPage({ params }: { params: Promise<Param
     console.warn('Hero slides query bypassed:', err);
   }
 
-  // 1. Reference Categories (الأقسام الدائرية السبعة بأيقونات احترافية موحدة بنفس ثيم غزل)
+  // 1. Dynamic Storefront Categories (الأقسام الدائرية المقروءة ديناميكياً من لوحة التحكم وقاعدة البيانات)
+  let storeCategories: any[] = [];
+  let dbLoadedSuccessfully = false;
+  try {
+    const allSynchronizedCats = await getSynchronizedCategories();
+    if (allSynchronizedCats && allSynchronizedCats.length > 0) {
+      dbLoadedSuccessfully = true;
+      // Filter to root categories intended for the online store:
+      // Must be root (!c.parentId), active (isActive !== false), and channel must be ONLINE or SHARED (POS excluded!)
+      storeCategories = allSynchronizedCats.filter(
+        (c) => !c.parentId && c.isActive !== false && (c.channel === 'ONLINE' || c.channel === 'SHARED' || !c.channel)
+      );
+    }
+  } catch (err) {
+    console.warn('Dynamic categories query bypassed:', err);
+  }
+
+  // Fallback default categories only if DB failed or returned 0 categories
+  if (!dbLoadedSuccessfully && storeCategories.length === 0) {
+    storeCategories = [
+      { id: 'cat-makeup', name: 'المكياج', slug: 'makeup', imagePath: '/logo.png', channel: 'SHARED' },
+      { id: 'cat-skincare', name: 'العناية بالبشرة', slug: 'skincare', imagePath: '/logo.png', channel: 'SHARED' },
+      { id: 'cat-haircare', name: 'العناية بالشعر', slug: 'haircare', imagePath: '/logo.png', channel: 'SHARED' },
+      { id: 'cat-fragrances', name: 'العطور', slug: 'fragrances', imagePath: '/logo.png', channel: 'SHARED' },
+      { id: 'cat-face-care', name: 'العناية بالوجه', slug: 'face-care', imagePath: '/logo.png', channel: 'SHARED' },
+      { id: 'cat-accessories', name: 'الإكسسوارات', slug: 'accessories', imagePath: '/logo.png', channel: 'SHARED' },
+      { id: 'cat-beauty-tools', name: 'أدوات التجميل', slug: 'beauty-tools', imagePath: '/logo.png', channel: 'SHARED' },
+    ];
+  }
+
+  // Filter out any duplicate offers/gifts category from the root list before adding dedicated offers item
+  const filteredRootCats = storeCategories.filter(
+    (c) => c.slug !== 'offers' && c.id !== 'offers' && c.name !== 'هدايا وعروض'
+  );
+
   const circularCategories = [
-    { nameAr: 'العطور', nameEn: 'Perfumes', icon: <PerfumeIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?category=perfumes` },
-    { nameAr: 'العناية بالشعر', nameEn: 'Haircare', icon: <HaircareIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?category=haircare` },
-    { nameAr: 'العناية بالبشرة', nameEn: 'Skincare', icon: <SkincareIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?category=skincare` },
-    { nameAr: 'المكياج', nameEn: 'Makeup', icon: <MakeupIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?category=makeup` },
-    { nameAr: 'الإكسسوارات', nameEn: 'Accessories', icon: <AccessoriesIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?category=accessories` },
-    { nameAr: 'أدوات التجميل', nameEn: 'Beauty Tools', icon: <ToolsIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?category=tools` },
-    { nameAr: 'هدايا وعروض', nameEn: 'Gifts & Sets', icon: <OffersIcon className="w-9 h-9 md:w-11 md:h-11" />, href: `/${locale}/shop?filter=offers` },
+    ...filteredRootCats.map((cat) => {
+      const hasCustomImage = Boolean(cat.imagePath && cat.imagePath !== '/logo.png' && !cat.imagePath.includes('logo.png'));
+      const displayName = getCategoryDisplayName(cat, isAr);
+      return {
+        id: cat.id || cat.slug,
+        name: displayName,
+        href: `/${locale}/shop?category=${cat.id || cat.slug}`,
+        imagePath: hasCustomImage ? cat.imagePath : null,
+        icon: !hasCustomImage ? getCategoryIcon(cat) : null,
+      };
+    }),
+    {
+      id: 'offers-entry',
+      name: isAr ? 'هدايا وعروض' : 'Gifts & Sets',
+      href: `/${locale}/shop?filter=offers`,
+      imagePath: null,
+      icon: <OffersIcon className="w-9 h-9 md:w-11 md:h-11" />,
+    },
   ];
 
   // 2. Real Storefront Products from Database (ONLINE & SHARED channels only)
@@ -124,6 +173,7 @@ export default async function StoreFrontPage({ params }: { params: Promise<Param
       rating: p.rating || 5.0,
       reviewsCount: p.reviewsCount || 0,
       shade: primaryVariant?.shade || '',
+      variantCount: p.variants?.length || 0,
       tag: customBadges[p.id] || customBadges[p.slug] || p.reviewReasons?.replace('TAG:', '') || undefined,
       imageUrl: p.images?.[0]?.url || '/logo.png',
     };
@@ -161,15 +211,28 @@ export default async function StoreFrontPage({ params }: { params: Promise<Param
           <div className="flex items-center justify-start sm:justify-center gap-6 md:gap-8 overflow-x-auto pb-4 pt-2 no-scrollbar">
             {circularCategories.map((cat, idx) => (
               <Link
-                key={idx}
+                key={cat.id || idx}
                 href={cat.href}
                 className="flex flex-col items-center gap-2.5 shrink-0 group focus:outline-none"
               >
-                <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-[#FADAE6]/50 via-pink-50 to-white border-2 border-pink-100 shadow-sm flex items-center justify-center p-3.5 group-hover:scale-105 group-hover:border-[#E6007E] group-hover:shadow-md transition-all duration-300">
-                  {cat.icon}
+                <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden object-cover border-2 border-pink-100 hover:border-[#E6007E] group-hover:border-[#E6007E] group-hover:scale-105 group-hover:shadow-md transition-all duration-300 shadow-xs relative flex items-center justify-center bg-gradient-to-tr from-[#FADAE6]/50 via-pink-50 to-white">
+                  {cat.imagePath ? (
+                    <Image
+                      src={cat.imagePath}
+                      alt={cat.name}
+                      fill
+                      unoptimized
+                      sizes="(max-width: 768px) 80px, 96px"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="p-3.5 flex items-center justify-center">
+                      {cat.icon}
+                    </div>
+                  )}
                 </div>
-                <span className="text-xs md:text-sm font-bold text-zinc-800 group-hover:text-[#E6007E] transition-colors text-center">
-                  {isAr ? cat.nameAr : cat.nameEn}
+                <span className="text-xs md:text-sm font-bold text-zinc-800 group-hover:text-[#E6007E] transition-colors text-center max-w-[85px] md:max-w-[105px] line-clamp-2">
+                  {cat.name}
                 </span>
               </Link>
             ))}
@@ -299,4 +362,58 @@ function CheckIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
     </svg>
   );
+}
+
+function getCategoryIcon(cat: { name: string; slug?: string }) {
+  const slug = (cat.slug || '').toLowerCase();
+  const name = (cat.name || '').toLowerCase();
+
+  if (slug.includes('perfume') || slug.includes('fragrance') || name.includes('عطور') || name.includes('عطر')) {
+    return <PerfumeIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('hair') || name.includes('شعر')) {
+    return <HaircareIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('face') || name.includes('وجه')) {
+    return <FaceCareIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('deodorant') || name.includes('مزيل') || name.includes('عرق')) {
+    return <DeodorantsIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('skin') || name.includes('بشرة')) {
+    return <SkincareIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('makeup') || slug.includes('cosmetic') || name.includes('مكياج')) {
+    return <MakeupIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('accessori') || name.includes('إكسسوار') || name.includes('اكسسوار')) {
+    return <AccessoriesIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('tool') || slug.includes('brush') || name.includes('أدوات') || name.includes('فرش')) {
+    return <ToolsIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  if (slug.includes('offer') || slug.includes('gift') || name.includes('هدايا') || name.includes('عرض') || name.includes('عروض')) {
+    return <OffersIcon className="w-9 h-9 md:w-11 md:h-11" />;
+  }
+  return <Sparkles className="w-9 h-9 md:w-11 md:h-11 text-[#E6007E]" />;
+}
+
+function getCategoryDisplayName(cat: { name: string; slug?: string; nameEn?: string }, isAr: boolean): string {
+  if (isAr) return cat.name;
+  if (cat.nameEn) return cat.nameEn;
+
+  const slug = (cat.slug || '').toLowerCase();
+  const name = (cat.name || '').toLowerCase();
+
+  if (slug.includes('makeup') || slug.includes('cosmetic') || name.includes('مكياج')) return 'Makeup';
+  if (slug.includes('face') || name.includes('وجه')) return 'Face Care';
+  if (slug.includes('deodorant') || name.includes('مزيل') || name.includes('عرق')) return 'Deodorants';
+  if (slug.includes('skin') || name.includes('بشرة')) return 'Skincare';
+  if (slug.includes('hair') || name.includes('شعر')) return 'Haircare';
+  if (slug.includes('fragrance') || slug.includes('perfume') || name.includes('عطور') || name.includes('عطر')) return 'Perfumes';
+  if (slug.includes('tool') || slug.includes('brush') || name.includes('أدوات') || name.includes('فرش')) return 'Beauty Tools';
+  if (slug.includes('accessori') || name.includes('إكسسوار') || name.includes('اكسسوار')) return 'Accessories';
+  if (slug.includes('gift') || slug.includes('offer') || name.includes('هدايا') || name.includes('عروض') || name.includes('عرض')) return 'Offers & Gifts';
+
+  return cat.name;
 }

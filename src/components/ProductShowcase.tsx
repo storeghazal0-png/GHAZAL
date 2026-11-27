@@ -47,10 +47,15 @@ export function ProductShowcase({
 
   const productName = isAr ? product.nameAr : (product.nameEn || product.nameAr);
 
-  // Check what attributes exist across variants (ensuring only ONE active dimension shows)
-  const hasShades = variants.some(v => v.shade || v.colorHex);
-  const hasSizes = !hasShades && variants.some(v => v.size && v.size !== 'Standard' && v.size !== 'افتراضي');
-  const hasScents = !hasShades && !hasSizes && variants.some(v => v.scent || v.colorName);
+  // Check what attributes exist across variants (allowing independent selection of scent, shade, and size)
+  const distinctShades = new Set(variants.map(v => v.shade).filter(Boolean));
+  const distinctScents = new Set(variants.map(v => v.scent || v.colorName).filter(Boolean));
+  const distinctSizes = new Set(variants.map(v => v.size).filter(s => s && s !== 'Standard' && s !== 'افتراضي' && s !== 'قياسي'));
+
+  const hasShades = distinctShades.size > 0 || variants.some(v => Boolean(v.colorHex));
+  const hasScents = distinctScents.size > 0;
+  const hasSizes = distinctSizes.size > 1 || (distinctSizes.size === 1 && !hasShades && !hasScents && variants.length > 1);
+  const hasGenericVariants = !hasShades && !hasScents && !hasSizes && variants.length > 1;
 
   const handleSelectVariant = (v: Variant) => {
     setSelectedVariant(v);
@@ -70,36 +75,48 @@ export function ProductShowcase({
 
       const existingItem = cartItems.find((item: any) => item.variantId === selectedVariant.id);
 
+      const selectedImg = selectedVariant.imageUrl || (selectedVariant as any).image || activeImage || initialImage || null;
+
       const variantLabel = [
+        selectedVariant.scent ? `${isAr ? 'رائحة' : 'Scent'} ${selectedVariant.scent}` : null,
         selectedVariant.shade ? `${isAr ? 'درجة' : 'Shade'} ${selectedVariant.shade}` : null,
         selectedVariant.colorName || null,
-        selectedVariant.size && selectedVariant.size !== 'Standard' ? selectedVariant.size : null,
-        selectedVariant.scent ? `${isAr ? 'رائحة' : 'Scent'} ${selectedVariant.scent}` : null,
+        selectedVariant.size && selectedVariant.size !== 'Standard' && selectedVariant.size !== 'افتراضي' && selectedVariant.size !== 'قياسي' ? selectedVariant.size : null,
       ].filter(Boolean).join(' - ') || (isAr ? 'القياسي' : 'Standard');
 
       if (existingItem) {
         existingItem.quantity += quantity;
+        if (selectedImg) existingItem.image = selectedImg;
+        existingItem.variantLabel = variantLabel;
+        existingItem.colorName = selectedVariant.colorName || selectedVariant.scent || existingItem.colorName;
+        existingItem.scent = selectedVariant.scent || existingItem.scent;
+        existingItem.shade = selectedVariant.shade || existingItem.shade;
+        existingItem.barcode = (selectedVariant as any).barcode || selectedVariant.sku || existingItem.barcode;
       } else {
         cartItems.push({
           productId: product.id,
           variantId: selectedVariant.id,
           sku: selectedVariant.sku || product.sku,
+          barcode: (selectedVariant as any).barcode || selectedVariant.sku || null,
           name: productName,
           variantLabel,
           size: selectedVariant.size,
           shade: selectedVariant.shade,
+          colorName: selectedVariant.colorName || selectedVariant.scent || null,
+          scent: selectedVariant.scent || null,
           colorHex: selectedVariant.colorHex,
           price: selectedVariant.price,
           quantity: quantity,
-          image: activeImage || initialImage || null
+          image: selectedImg
         });
       }
 
       localStorage.setItem('ghazal_cart', JSON.stringify(cartItems));
       localStorage.setItem('dahab_cart', JSON.stringify(cartItems));
 
-      // Trigger a storage event manually so Header cart counter updates instantly
+      // Trigger a storage and cart event manually so Header cart counter and carts update instantly
       window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('cart_updated'));
 
       setAdded(true);
       setTimeout(() => setAdded(false), 2200);
@@ -170,6 +187,12 @@ export function ProductShowcase({
           <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-zinc-900 leading-snug mb-2">
             {productName}
           </h1>
+
+          {variants.length > 1 && (
+            <p className="text-xs sm:text-sm text-[#E6007E] font-bold mb-3">
+              {isAr ? 'يتوفر بعدة خيارات' : 'Available in multiple options'}
+            </p>
+          )}
 
 
 
@@ -345,6 +368,46 @@ export function ProductShowcase({
                           />
                         )}
                         <span>{scentLabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Generic Options Selector */}
+            {hasGenericVariants && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-zinc-800">
+                    {isAr ? 'الخيارات المتاحة:' : 'Available Options:'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {variants.map((v, i) => {
+                    const isSelected = selectedVariant?.id === v.id;
+                    const label = v.colorName || v.shade || v.size || `خيار ${i + 1}`;
+                    const vImg = v.imageUrl || (v as any).image;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => handleSelectVariant(v)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                          isSelected
+                            ? 'border-[#E6007E] bg-pink-100 text-[#E6007E] ring-1 ring-[#E6007E] font-black'
+                            : 'border-zinc-200 hover:border-pink-300 bg-white text-zinc-700'
+                        }`}
+                      >
+                        {vImg && (
+                          <img
+                            src={vImg}
+                            alt={label}
+                            className="w-4 h-4 rounded-sm object-contain shrink-0 bg-white"
+                          />
+                        )}
+                        <span>{label}</span>
                       </button>
                     );
                   })}

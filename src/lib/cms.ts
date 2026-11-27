@@ -8,7 +8,20 @@ export async function getCMSContent(key: string, defaultValue: any) {
     const setting = await prisma.siteSettings.findUnique({
       where: { key }
     });
-    if (setting) return JSON.parse(setting.value);
+    if (setting) {
+      try {
+        return JSON.parse(setting.value);
+      } catch {
+        return setting.value;
+      }
+    }
+
+    // Migrate the legacy in-code value to the database once. After this
+    // first read, the database is the source of truth for the CMS field.
+    const seeded = await prisma.siteSettings.create({
+      data: { key, value: JSON.stringify(defaultValue) }
+    });
+    return JSON.parse(seeded.value);
   } catch (e) {}
 
   if (inMemoryCMS[key] !== undefined) {

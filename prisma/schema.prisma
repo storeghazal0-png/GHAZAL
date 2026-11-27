@@ -145,6 +145,7 @@ model Product {
   stockStatus      String              @default("UNVERIFIED")
   notesStatus      String              @default("VERIFIED")
   channel          String              @default("SHARED") // "ONLINE" | "POS" | "SHARED"
+  variantType      String              @default("NONE") // "SHADE" | "SCENT" | "SIZE" | "NONE"
   variants         ProductVariant[]
   images           ProductImage[]
   accords          ProductAccord[]
@@ -219,6 +220,8 @@ model Category {
   name        String
   description String?
   imagePath   String?
+  channel     String              @default("SHARED") // "ONLINE" | "POS" | "SHARED"
+  isActive    Boolean             @default(true)
   sortOrder   Int                 @default(0)
   parentId    String?
   parent      Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
@@ -228,6 +231,8 @@ model Category {
 
   @@index([parentId])
   @@index([sortOrder])
+  @@index([channel])
+  @@index([isActive])
 }
 
 model Brand {
@@ -322,6 +327,10 @@ model OrderItem {
   sku       String
   name      String
   size      String
+  shade     String? // Selected shade (e.g. "20 Pioneer")
+  colorName String? // Selected color / scent name (e.g. "مسك الطهارة", "وردي ناعم")
+  imageUrl  String? // Image specific to this scent/shade/variant option
+  barcode   String? // Barcode of this specific variant
   quantity  Int
   unitPrice Int
   total     Int

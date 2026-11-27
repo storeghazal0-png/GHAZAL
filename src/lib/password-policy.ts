@@ -1,4 +1,4 @@
-import * as argon2 from 'argon2';
+import { verifyPassword } from './auth';
 
 const WEAK_SUBSTRINGS = ['dahab', 'perfume', 'perfumes', 'admin', 'cashier', 'password'];
 
@@ -53,9 +53,5 @@ export function validatePasswordPolicy(password: string, email: string): {
  * We compare the new password against the existing passwordHash.
  */
 export async function isPasswordReused(newPassword: string, currentHash: string): Promise<boolean> {
-  try {
-    return await argon2.verify(currentHash, newPassword);
-  } catch (error) {
-    return false;
-  }
+  return await verifyPassword(newPassword, currentHash);
 }

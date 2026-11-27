@@ -7,6 +7,9 @@ import { ProductNewForm } from '@/components/ProductNewForm';
 import { getSynchronizedCategories } from '@/actions/categories';
 import { getGlobalSizePrices } from '@/actions/settings';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminProductsNewPage({
   searchParams
 }: {
@@ -32,7 +35,7 @@ export default async function AdminProductsNewPage({
         where: { id: session.employeeId },
         include: { role: true }
       }),
-      prisma.category.findMany({ orderBy: { name: 'asc' } }),
+      prisma.category.findMany({ select: { id: true, name: true, channel: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
       prisma.brand.findMany({ orderBy: { name: 'asc' } }),
       prisma.gender.findMany({ orderBy: { name: 'asc' } }),
       prisma.season.findMany({ orderBy: { name: 'asc' } }),
@@ -99,7 +102,7 @@ export default async function AdminProductsNewPage({
         </div>
 
         <ProductNewForm 
-          categories={categories.map(c => ({ id: c.id, name: c.name }))} 
+          categories={categories.map(c => ({ id: c.id, name: c.name, channel: (c as any).channel || 'SHARED' }))} 
           brands={brands.map(b => ({ id: b.id, name: b.name, nameAr: b.nameAr }))}
           genders={genders.map(g => ({ id: g.id, name: g.name }))}
           seasons={seasons.map(s => ({ id: s.id, name: s.name }))}

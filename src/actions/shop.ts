@@ -24,7 +24,14 @@ export async function getPaginatedProducts({
   orderBy?: string;
 }) {
   try {
-    const where: any = { isVisible: true, channel: { not: 'POS' } };
+    const where: any = { 
+      isVisible: true, 
+      channel: { in: ['ONLINE', 'SHARED'] },
+      category: {
+        isActive: true,
+        channel: { in: ['ONLINE', 'SHARED'] }
+      }
+    };
     
     const cleanCategory = (categoryId === '*' || categoryId === 'all') ? '' : categoryId;
     if (cleanCategory) {
@@ -34,6 +41,8 @@ export async function getPaginatedProducts({
         cleanCategory;
 
       where.category = {
+        isActive: true,
+        channel: { in: ['ONLINE', 'SHARED'] },
         OR: [
           { slug: normalizedCategory },
           { slug: cleanCategory },
@@ -69,6 +78,7 @@ export async function getPaginatedProducts({
 
     let products: any[] = [];
     let total = 0;
+    let dbSuccess = false;
 
     try {
       const [dbProducts, dbTotal] = await Promise.all([
@@ -88,11 +98,16 @@ export async function getPaginatedProducts({
       ]);
 
       products = dbProducts.map((p: any) => {
-        const lowestPrice = p.variants?.length > 0 ? Math.min(...p.variants.map((v: any) => v.price)) : 0;
-        const pricing = computeProductPromotionPricing({ ...p, priceFils: lowestPrice }, 'STOREFRONT', activePromos);
+        const publicVariants = (p.variants || []).map((v: any) => {
+          const { costPrice: _costPrice, ...safeVariant } = v;
+          return safeVariant;
+        });
+        const lowestPrice = publicVariants.length > 0 ? Math.min(...publicVariants.map((v: any) => v.price)) : 0;
+        const pricing = computeProductPromotionPricing({ ...p, variants: publicVariants, priceFils: lowestPrice }, 'STOREFRONT', activePromos);
 
         return {
           ...p,
+          variants: publicVariants,
           priceFils: pricing.priceFils,
           originalPriceFils: pricing.originalPriceFils,
           compareAtPriceFils: pricing.compareAtPriceFils,
@@ -101,11 +116,14 @@ export async function getPaginatedProducts({
         };
       });
       total = dbTotal;
+      dbSuccess = true;
     } catch (e) {
       // Prisma offline or schema fallback
+      dbSuccess = false;
     }
 
-    if (products.length === 0) {
+    // Only use mock catalog fallback if the database connection failed
+    if (!dbSuccess) {
       let filtered = COSMETICS_CATALOG.filter(p => !p.isPOSOnly && p.channel !== 'POS');
 
       if (categoryId) {
@@ -136,6 +154,10 @@ export async function getPaginatedProducts({
       total = filtered.length;
       products = filtered.slice(skip, skip + take).map(p => {
         const pricing = computeProductPromotionPricing(p, 'STOREFRONT', activePromos);
+        const publicVariants = (p.variants || []).map((v: any) => {
+          const { costPrice: _costPrice, ...safeVariant } = v;
+          return safeVariant;
+        });
 
         return {
           id: p.id,
@@ -144,8 +166,8 @@ export async function getPaginatedProducts({
           nameEn: p.nameEn,
           category: { id: p.categoryId, name: p.categoryName, slug: p.categorySlug },
           categoryId: p.categoryId,
-          brand: { name: p.brandName },
-          variants: p.variants,
+          brand: { name: p.brandName === 'غزل' ? '' : p.brandName },
+          variants: publicVariants,
           images: p.images,
           rating: p.rating,
           isFeatured: p.isFeatured,

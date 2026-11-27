@@ -32,6 +32,8 @@ export async function generateMetadata({
   try {
     product = await prisma.product.findFirst({
       where: {
+        isVisible: true,
+        channel: { in: ['ONLINE', 'SHARED'] },
         OR: [
           { slug: cleanSlug },
           { id: cleanSlug },
@@ -67,13 +69,30 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   try {
     dbProduct = await prisma.product.findFirst({
       where: {
+        isVisible: true,
+        channel: { in: ['ONLINE', 'SHARED'] },
         OR: [
           { slug: cleanSlug },
           { id: cleanSlug },
         ],
       },
       include: {
-        variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
+        variants: {
+          where: { isActive: true },
+          orderBy: { price: 'asc' },
+          select: {
+            id: true,
+            size: true,
+            shade: true,
+            colorName: true,
+            colorHex: true,
+            imageUrl: true,
+            sku: true,
+            price: true,
+            compareAt: true,
+            isActive: true,
+          },
+        },
         images: { orderBy: { order: 'asc' } },
         category: true,
         brand: true,

@@ -10,7 +10,8 @@ import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { getActivePromotions, computeProductPromotionPricing, findActivePromotionForProduct } from '@/lib/promotions';
 import { getProductCustomBadges } from '@/actions/products';
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const BASE_URL = 'https://ghazal.jo';
 
@@ -76,19 +77,28 @@ export default async function ShopPage({
   let families: any[] = [];
   let customBadges: Record<string, string> = {};
 
+  let dbSuccess = false;
+
   try {
     // Build prisma where clause (Online storefront only queries ONLINE and SHARED channels)
     const where: any = { 
       isVisible: true,
-      channel: { in: ['ONLINE', 'SHARED'] }
+      channel: { in: ['ONLINE', 'SHARED'] },
+      category: {
+        isActive: true,
+        channel: { in: ['ONLINE', 'SHARED'] }
+      }
     };
     
     if (categoryParam) {
       where.category = {
+        isActive: true,
+        channel: { in: ['ONLINE', 'SHARED'] },
         OR: [
           { slug: normalizedCategory },
           { slug: categoryParam },
-          { id: categoryParam }
+          { id: categoryParam },
+          { parent: { slug: normalizedCategory } }
         ]
       };
     }
@@ -129,7 +139,22 @@ export default async function ShopPage({
         orderBy: { createdAt: 'desc' }
       }),
       prisma.product.count({ where }),
-      prisma.category.findMany({ orderBy: { name: 'asc' } }),
+      prisma.category.findMany({ 
+        where: { 
+          isActive: true, 
+          channel: { in: ['ONLINE', 'SHARED'] } 
+        },
+        include: {
+          children: {
+            where: {
+              isActive: true,
+              channel: { in: ['ONLINE', 'SHARED'] },
+            },
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          },
+        },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] 
+      }),
       prisma.gender.findMany({ orderBy: { name: 'asc' } }),
       prisma.fragranceFamily.findMany({ orderBy: { name: 'asc' } }),
       getProductCustomBadges(),
@@ -138,11 +163,16 @@ export default async function ShopPage({
     customBadges = fetchedBadges || {};
 
     products = dbProducts.map((p: any) => {
-      const lowestPrice = p.variants?.length > 0 ? Math.min(...p.variants.map((v: any) => v.price)) : 0;
-      const pricing = computeProductPromotionPricing({ ...p, priceFils: lowestPrice }, 'STOREFRONT', activePromos);
+      const publicVariants = (p.variants || []).map((v: any) => {
+        const { costPrice: _costPrice, ...safeVariant } = v;
+        return safeVariant;
+      });
+      const lowestPrice = publicVariants.length > 0 ? Math.min(...publicVariants.map((v: any) => v.price)) : 0;
+      const pricing = computeProductPromotionPricing({ ...p, variants: publicVariants, priceFils: lowestPrice }, 'STOREFRONT', activePromos);
 
       return {
         ...p,
+        variants: publicVariants,
         tag: (p.reviewReasons?.startsWith('TAG:') ? p.reviewReasons.replace('TAG:', '') : null) || customBadges[p.id] || customBadges[p.slug] || p.tag || undefined,
         priceFils: pricing.priceFils,
         originalPriceFils: pricing.originalPriceFils,
@@ -156,14 +186,16 @@ export default async function ShopPage({
     categories = dbCats;
     genders = dbGenders;
     families = dbFamilies;
+    dbSuccess = true;
   } catch (error) {
     console.warn('Database query failed or is offline in ShopPage, using curated beauty catalog fallback.');
     try {
       customBadges = await getProductCustomBadges();
     } catch {}
+    dbSuccess = false;
   }
 
-  if (categories.length === 0) {
+  if (!dbSuccess && categories.length === 0) {
     categories = [
       { id: 'cat-makeup', name: 'المكياج', slug: 'makeup' },
       { id: 'cat-skincare', name: 'العناية بالبشرة', slug: 'skincare' },

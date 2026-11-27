@@ -1,5 +1,5 @@
 import React from 'react';
-import { requireAuth } from '@/lib/dal';
+import { requireAuth, requirePermission } from '@/lib/dal';
 import { getCMSContent, updateCMSContent } from '@/lib/cms';
 import { AdminSidebar } from '@/components/AdminSidebar';
 import Link from 'next/link';
@@ -29,6 +29,7 @@ export default async function AdminContentPage() {
   // Handle Server Action inside component
   async function handleSaveCMS(formData: FormData) {
     'use server';
+    await requirePermission('manage:settings');
     const textAr = formData.get('textAr') as string;
     const textEn = formData.get('textEn') as string;
     const heroTitleAr = formData.get('heroTitleAr') as string;
@@ -46,6 +47,7 @@ export default async function AdminContentPage() {
     ]);
 
     revalidatePath('/', 'layout');
+    revalidatePath('/admin/content');
   }
 
   return (

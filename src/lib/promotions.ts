@@ -63,8 +63,8 @@ export function findActivePromotionForProduct(
 
   return promos.find(p => {
     if (!p.targetProductId) return false;
-    const target = p.targetProductId.trim().toLowerCase();
-    return (pid && target === pid) || (pslug && target === pslug);
+    const targets = p.targetProductId.split(',').map(s => s.trim().toLowerCase());
+    return (pid && targets.includes(pid)) || (pslug && targets.includes(pslug));
   }) || null;
 }
 

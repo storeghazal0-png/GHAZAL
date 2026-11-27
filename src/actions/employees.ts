@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/db';
 import { requirePermission, requireSuperAdmin } from '@/lib/dal';
-import * as argon2 from 'argon2';
+import { hashPassword, verifyPassword } from '@/lib/auth';
 import crypto from 'crypto';
 import { revalidatePath } from 'next/cache';
 
@@ -102,17 +102,17 @@ export async function switchCashierEmployee(employeeId: string, pinOrPassword?: 
     // Verify PIN / Password cryptographically using hash
     let isPinValid = false;
 
-    // 1. Check argon2 pinHash
+    // 1. Check pinHash
     if (emp.pinHash && cleanPin) {
       try {
-        isPinValid = await argon2.verify(emp.pinHash, cleanPin);
+        isPinValid = await verifyPassword(cleanPin, emp.pinHash);
       } catch {}
     }
 
-    // 2. Check argon2 passwordHash
+    // 2. Check passwordHash
     if (!isPinValid && emp.passwordHash && cleanPin) {
       try {
-        isPinValid = await argon2.verify(emp.passwordHash, cleanPin);
+        isPinValid = await verifyPassword(cleanPin, emp.passwordHash);
       } catch {}
     }
 
@@ -170,8 +170,8 @@ export async function createEmployee(data: {
   try {
     const password = data.password || data.pin || '1234';
     const pin = data.pin || '1234';
-    const passwordHash = await argon2.hash(password);
-    const pinHash = await argon2.hash(pin);
+    const passwordHash = await hashPassword(password);
+    const pinHash = await hashPassword(pin);
 
     const existing = await prisma.employee.findUnique({
       where: { email: data.email }
@@ -232,10 +232,10 @@ export async function updateEmployee(data: {
       isActive: data.isActive
     };
     if (data.password) {
-      dataToUpdate.passwordHash = await argon2.hash(data.password);
+      dataToUpdate.passwordHash = await hashPassword(data.password);
     }
     if (data.pin) {
-      dataToUpdate.pinHash = await argon2.hash(data.pin);
+      dataToUpdate.pinHash = await hashPassword(data.pin);
     }
     await prisma.employee.update({
       where: { id: data.id },

@@ -1,5 +1,4 @@
 import { randomBytes, createHash, createHmac, timingSafeEqual } from 'crypto';
-import * as argon2 from 'argon2';
 import { prisma } from './db';
 import { cookies } from 'next/headers';
 
@@ -8,17 +7,51 @@ const SESSION_EXPIRATION_DAYS = 7;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'ghazal-perfumes-erp-pos-secret-key-2026';
 
 export async function hashPassword(password: string): Promise<string> {
-  // Use faster argon2 parameters to reduce login time (especially useful in dev)
-  return argon2.hash(password, { 
-    type: argon2.argon2id,
-    timeCost: 2,
-    memoryCost: 19456, // 19 MB
-    parallelism: 1
-  });
+  try {
+    const argon2 = await import('argon2');
+    return await argon2.hash(password, { 
+      type: argon2.argon2id,
+      timeCost: 2,
+      memoryCost: 19456, // 19 MB
+      parallelism: 1
+    });
+  } catch {
+    const { argon2id } = await import('hash-wasm');
+    const salt = new Uint8Array(16);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(salt);
+    } else {
+      randomBytes(16).copy(salt);
+    }
+    return await argon2id({
+      password,
+      salt,
+      parallelism: 1,
+      iterations: 2,
+      memorySize: 19456,
+      hashLength: 32,
+      outputType: 'encoded',
+    });
+  }
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return argon2.verify(hash, password);
+  if (!password || !hash) return false;
+  try {
+    const argon2 = await import('argon2');
+    return await argon2.verify(hash, password);
+  } catch {
+    try {
+      const { argon2Verify } = await import('hash-wasm');
+      return await argon2Verify({
+        password,
+        hash,
+      });
+    } catch (e) {
+      console.error('[Auth] Password verification error:', e);
+      return false;
+    }
+  }
 }
 
 function signToken(raw: string): string {

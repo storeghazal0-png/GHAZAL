@@ -14,9 +14,9 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
 const checkoutSchema = z.object({
-  customerName: z.string().min(2, 'يرجى إدخال اسم المستلم الكامل (حرفين على الأقل)'),
-  customerPhone: z.string().min(8, 'يرجى إدخال رقم هاتف صحيح للتواصل والتوصيل (مثال: 07XXXXXXXX)'),
-  detailedAddress: z.string().min(3, 'يرجى إدخال العنوان التفصيلي للتوصيل').optional(),
+  customerName: z.string().trim().min(2, 'يرجى إدخال اسم المستلم (يقبل اسماً واحداً أو كاملاً، حرفين على الأقل)'),
+  customerPhone: z.string().trim().min(8, 'يرجى إدخال رقم هاتف صحيح للتواصل والتوصيل (مثال: 07XXXXXXXX)'),
+  detailedAddress: z.string().trim().min(3, 'يرجى إدخال العنوان التفصيلي للتوصيل').optional(),
   addressStreet: z.string().optional(),
   addressBuilding: z.string().optional(),
   addressApartment: z.string().optional(),
@@ -43,13 +43,15 @@ export async function processCheckout(prevState: any, formData: FormData) {
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
     let customMsg = 'يرجى التحقق من صحة البيانات المدخلة';
+    let field = 'general';
     if (firstIssue) {
-      if (firstIssue.path.includes('customerName')) customMsg = 'يرجى إدخال الاسم الكامل للمستلم';
+      field = String(firstIssue.path[0] || 'general');
+      if (firstIssue.path.includes('customerName')) customMsg = 'يرجى إدخال اسم المستلم (يقبل اسماً واحداً، حرفين على الأقل)';
       else if (firstIssue.path.includes('customerPhone')) customMsg = 'يرجى إدخال رقم هاتف أردني صحيح (07XXXXXXXX)';
       else if (firstIssue.path.includes('detailedAddress')) customMsg = 'يرجى كتابة العنوان التفصيلي (المنطقة، الشارع، أو علامة مميزة)';
       else customMsg = firstIssue.message || 'يرجى التحقق من صحة المدخلات';
     }
-    return { error: customMsg };
+    return { error: customMsg, field };
   }
 
   const { customerName, customerPhone, detailedAddress, addressStreet, addressBuilding, addressApartment, shippingZoneId, idempotencyKey, appliedRewards: appliedRewardsJson, items: itemsJson } = parsed.data;
@@ -163,6 +165,10 @@ export async function processCheckout(prevState: any, formData: FormData) {
     costPrice?: number | null;
     discount?: number;
     taxAmount?: number;
+    shade?: string | null;
+    colorName?: string | null;
+    imageUrl?: string | null;
+    barcode?: string | null;
   }[] = [];
 
   for (const item of parsedItems) {
@@ -202,12 +208,32 @@ export async function processCheckout(prevState: any, formData: FormData) {
     const total = unitPrice * quantity;
     totalAmount += total;
 
+    const itemShade = item.shade || variant.shade || null;
+    const itemColorOrScent = item.colorName || item.scent || variant.colorName || (variant as any).scent || null;
+    const itemBarcode = item.barcode || (variant as any).barcode || variant.sku || null;
+    const itemImageUrl = item.image || variant.imageUrl || (variant as any).image || null;
+
+    // Display label for option / scent / shade (e.g. "عطر مسك (رائحة فانيلا)")
+    const optionText = [
+      item.variantLabel && item.variantLabel !== 'القياسي' && item.variantLabel !== 'Standard' ? item.variantLabel : null,
+      !item.variantLabel && itemColorOrScent ? itemColorOrScent : null,
+      !item.variantLabel && itemShade ? `درجة ${itemShade}` : null,
+    ].filter(Boolean)[0];
+
+    const finalItemName = optionText 
+      ? `${variant.product.nameAr} (${optionText})`
+      : variant.product.nameAr;
+
     orderItemsData.push({
       productId: variant.productId,
       variantId: variant.id,
       sku: variant.sku,
-      name: variant.product.nameAr,
-      size: variant.size,
+      barcode: itemBarcode,
+      name: finalItemName,
+      size: variant.size || (optionText || 'قياسي'),
+      shade: itemShade,
+      colorName: itemColorOrScent,
+      imageUrl: itemImageUrl,
       quantity,
       unitPrice,
       total,
@@ -343,8 +369,12 @@ export async function processCheckout(prevState: any, formData: FormData) {
         productId: item.productId,
         variantId: item.variantId,
         sku: item.sku,
+        barcode: item.barcode || null,
         name: item.name,
         size: item.size,
+        shade: item.shade || null,
+        colorName: item.colorName || null,
+        imageUrl: item.imageUrl || null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         total: item.total,

@@ -7,6 +7,8 @@ node_modules/
 
 # Next.js & Electron build outputs
 .next/
+.open-next/
+.wrangler/
 **/.next/
 out/
 **/out/
@@ -63,7 +65,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Next.js telemetry, cache & tests
-.next/cache
+.next/
+.open-next/
+.wrangler/cache
 .turbo
 coverage/
 .nyc_output/

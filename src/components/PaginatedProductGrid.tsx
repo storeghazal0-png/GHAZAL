@@ -142,7 +142,7 @@ export function PaginatedProductGrid({
 
                 {/* Brand & Category */}
                 <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">
-                  <span className="truncate max-w-[50%]">{product.brand?.name || product.brandName || 'GHAZAL'}</span>
+                  <span className="truncate max-w-[50%]">{product.brand?.name || (product.brandName === 'غزل' ? '' : product.brandName) || ''}</span>
                   <span className="truncate max-w-[50%]">{product.category?.name || product.categoryName}</span>
                 </div>
 
@@ -152,6 +152,11 @@ export function PaginatedProductGrid({
                     {isAr ? product.nameAr : (product.nameEn || product.nameAr)}
                   </h3>
                 </Link>
+                {product.variants?.filter((variant: any) => variant.isActive !== false).length > 1 && (
+                  <p className="text-[10px] sm:text-xs text-[#E6007E] font-bold mb-2">
+                    {isAr ? 'يتوفر بعدة خيارات' : 'Available in multiple options'}
+                  </p>
+                )}
               </div>
 
               {/* Price & Action - Clean Numbers Before & After without extra text */}

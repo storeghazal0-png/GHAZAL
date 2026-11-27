@@ -514,6 +514,14 @@ export async function getStoreLocationSettings() {
       memoryLocationSettings = settings;
       return settings;
     }
+
+    // Persist the existing location once so the CMS editor always works from
+    // the database instead of relying on an in-memory default.
+    const seeded = await prisma.storeLocationSettings.create({
+      data: defaultLocationSettings
+    });
+    memoryLocationSettings = seeded;
+    return seeded;
   } catch (err) {
     console.warn('Prisma getStoreLocationSettings fallback active');
   }

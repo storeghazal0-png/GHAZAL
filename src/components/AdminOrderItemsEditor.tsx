@@ -349,9 +349,9 @@ export function AdminOrderItemsEditor({
       <div className="divide-y divide-zinc-200">
         {items.map((item) => {
           const itemName = item.name || item.product?.nameAr || 'منتج غير مسمى';
-          const itemSpec = item.size || item.variant?.size || item.shade || null;
+          const itemSpec = item.size || item.variant?.size || null;
           const itemTotal = ((item.total || item.totalPrice || ((item.unitPrice || 0) * (item.quantity || 1))) || 0);
-          const itemImage = resolvePOSItemImage(item) || item.imageUrl || item.image || item.product?.images?.[0]?.url || item.variant?.imageUrl || null;
+          const itemImage = item.imageUrl || item.image || resolvePOSItemImage(item) || item.variant?.imageUrl || item.product?.images?.[0]?.url || null;
 
           return (
             <div 
@@ -403,14 +403,24 @@ export function AdminOrderItemsEditor({
                   </h4>
 
                   <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {(item.colorName || item.scent || (item.variant as any)?.colorName) && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-pink-100 text-[#E6007E] font-black border border-pink-300 text-xs shadow-2xs">
+                        <span>الرائحة / الخيار: {item.colorName || item.scent || (item.variant as any)?.colorName}</span>
+                      </span>
+                    )}
+                    {(item.shade || (item.variant as any)?.shade) && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-purple-100 text-purple-800 font-black border border-purple-300 text-xs shadow-2xs">
+                        <span>الدرجة: {item.shade || (item.variant as any)?.shade}</span>
+                      </span>
+                    )}
                     {itemSpec && (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-zinc-100 text-zinc-800 font-bold border border-zinc-200 text-xs">
                         المواصفة: {itemSpec}
                       </span>
                     )}
-                    {item.sku && (
-                      <span className="font-mono text-[11px] text-zinc-500 bg-white px-2 py-0.5 rounded-lg border border-zinc-200" dir="ltr">
-                        SKU: {item.sku}
+                    {(item.barcode || (item.variant as any)?.barcode) && (
+                      <span className="font-mono text-[11px] font-bold text-zinc-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200" dir="ltr">
+                        باركود: {item.barcode || (item.variant as any)?.barcode}
                       </span>
                     )}
                   </div>
@@ -555,7 +565,7 @@ export function AdminOrderItemsEditor({
                 >
                   {localProducts.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.nameAr || p.name} {p.sku ? `(${p.sku})` : ''} — {(((p.variants?.[0]?.price || 15000)) / 1000).toFixed(3)} د.أ
+                      {p.nameAr || p.name} — {(((p.variants?.[0]?.price || 15000)) / 1000).toFixed(3)} د.أ
                     </option>
                   ))}
                 </select>

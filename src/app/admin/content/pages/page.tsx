@@ -1,5 +1,5 @@
 import React from 'react';
-import { requireAuth } from '@/lib/dal';
+import { requireAuth, requirePermission } from '@/lib/dal';
 import { getCMSContent, updateCMSContent } from '@/lib/cms';
 import { AdminSidebar } from '@/components/AdminSidebar';
 import { revalidatePath } from 'next/cache';
@@ -60,6 +60,7 @@ export default async function AdminPagesCMS() {
 
   async function handleSavePageCMS(formData: FormData) {
     'use server';
+    await requirePermission('manage:settings');
     const key = formData.get('cmsKey') as string;
     
     if (key === 'shipping_policy') {
@@ -80,6 +81,7 @@ export default async function AdminPagesCMS() {
 
     // Force Next.js to re-fetch the new content on public pages
     revalidatePath('/', 'layout');
+    revalidatePath('/admin/content/pages');
   }
 
   const pages = [

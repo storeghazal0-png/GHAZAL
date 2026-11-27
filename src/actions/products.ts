@@ -10,6 +10,13 @@ import { getSynchronizedCategories } from '@/actions/categories';
 // In-memory fallback and quick lookup cache for product custom badges
 const inMemoryProductBadges: Record<string, string> = {};
 
+type ProductVariantType = 'SHADE' | 'SCENT' | 'SIZE' | 'NONE';
+
+function normalizeVariantType(value: FormDataEntryValue | null): ProductVariantType {
+  const normalized = String(value || '').toUpperCase();
+  return normalized === 'SHADE' || normalized === 'SCENT' || normalized === 'SIZE' ? normalized : 'NONE';
+}
+
 export async function getProductCustomBadges(): Promise<Record<string, string>> {
   try {
     const setting = await prisma.siteSettings.findUnique({
@@ -119,6 +126,7 @@ export async function createProduct(formData: FormData) {
     const genderId = (formData.get('genderId') as string) || null;
     const seasonId = (formData.get('seasonId') as string) || null;
     const familyId = (formData.get('familyId') as string) || null;
+    const variantType = normalizeVariantType(formData.get('variantType'));
     const slug = sku.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now();
 
     if (!categoryId) throw new Error('التصنيف مطلوب');
@@ -158,6 +166,7 @@ export async function createProduct(formData: FormData) {
           genderId,
           seasonId,
           familyId,
+          variantType,
           stockLiters: 0,
           variants: {
             create: variants.map((v: any) => ({
@@ -271,6 +280,7 @@ export async function updateProduct(productId: string, formData: FormData) {
     const genderId = (formData.get('genderId') as string) || null;
     const seasonId = (formData.get('seasonId') as string) || null;
     const familyId = (formData.get('familyId') as string) || null;
+    const variantType = normalizeVariantType(formData.get('variantType'));
 
     if (!categoryId) throw new Error('التصنيف مطلوب');
 
@@ -327,6 +337,7 @@ export async function updateProduct(productId: string, formData: FormData) {
           genderId,
           seasonId,
           familyId,
+          variantType,
         }
       });
 

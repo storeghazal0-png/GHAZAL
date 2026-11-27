@@ -30,16 +30,10 @@ export default async function AdminCMSHomepagePage() {
     categories = dbCategories || [];
   } catch (err) {
     console.warn('Prisma AdminCMSHomepagePage query fallback active');
-    products = [
-      { id: 'p-1', nameAr: 'أحمر شفاه سوبر ستاي مات إنك - مايبيلين' },
-      { id: 'p-2', nameAr: 'سيروم حمض الهيالورونيك ريفايتلاليفت - لوريال باريس' },
-      { id: 'p-3', nameAr: 'قناع الشفاه الليلي بالتوت - لانيج' },
-    ];
-    categories = [
-      { id: 'cat-makeup', name: 'المكياج ومستحضرات التجميل' },
-      { id: 'cat-skincare', name: 'العناية بالبشرة' },
-      { id: 'cat-fragrances', name: 'العطور الفاخرة' },
-    ];
+    // Do not show fake catalog entries in the CMS. The editor reflects only
+    // products and categories that actually exist in the database.
+    products = [];
+    categories = [];
   }
 
   // Load current page CMS configurations

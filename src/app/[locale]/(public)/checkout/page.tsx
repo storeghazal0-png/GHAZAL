@@ -6,7 +6,7 @@ import { filsToDisplay } from '@/lib/money';
 import Link from 'next/link';
 import { JORDAN_GOVERNORATES_SHIPPING_ZONES } from '@/lib/shipping-zones';
 import { evaluateCartRewardsAction, RewardEvaluationResult } from '@/actions/rewards';
-import { Sparkles, Gift, Truck, Check } from 'lucide-react';
+import { Sparkles, Gift, Truck, Check, AlertCircle } from 'lucide-react';
 
 export default function CheckoutPage({ params }: { params: Promise<{ locale: string }> }) {
   const resolvedParams = React.use(params);
@@ -25,11 +25,29 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [selectedGiftId, setSelectedGiftId] = useState<string>('');
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => `CHK-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`);
 
+  // Controlled customer details (prevents accidental data clearing on errors)
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [detailedAddress, setDetailedAddress] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
   useEffect(() => {
     const saved = localStorage.getItem('ghazal_cart') || localStorage.getItem('dahab_cart');
     if (saved) {
       try {
         setCartItems(JSON.parse(saved));
+      } catch (e) {}
+    }
+
+    // Restore previously entered checkout info so user never has to re-type
+    const savedCustomer = localStorage.getItem('ghazal_customer_info');
+    if (savedCustomer) {
+      try {
+        const parsed = JSON.parse(savedCustomer);
+        if (parsed.name) setCustomerName(parsed.name);
+        if (parsed.phone) setCustomerPhone(parsed.phone);
+        if (parsed.address) setDetailedAddress(parsed.address);
       } catch (e) {}
     }
     
@@ -82,10 +100,12 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   }, []);
 
   useEffect(() => {
-    if (state?.success && state.whatsappUrl) {
-      // Clear cart on success
+    if (state?.success) {
+      // Clear cart on success to prevent accidental duplicate submission
       localStorage.removeItem('dahab_cart');
       localStorage.removeItem('ghazal_cart');
+      setCartItems([]);
+      window.dispatchEvent(new Event('cart_updated'));
 
       // Remember device active order for top bar persistence
       if (state.reference) {
@@ -99,12 +119,18 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         } catch (e) {}
       }
 
-      window.location.href = state.whatsappUrl;
+      // Redirect directly to Order Confirmation & Invoice page (no automatic WhatsApp redirect)
+      window.location.href = `/${locale}/order-success/${state.reference}`;
     } else if (state?.error) {
       setIsSubmittingLocal(false);
       setIsCooldownActive(false);
       if (cooldownTimerRef.current) {
         clearTimeout(cooldownTimerRef.current);
+      }
+      if (state.field === 'customerName' || state.error.includes('اسم')) {
+        setNameError(state.error);
+      } else if (state.field === 'customerPhone' || state.error.includes('هاتف')) {
+        setPhoneError(state.error);
       }
     }
   }, [state]);
@@ -167,6 +193,30 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           <form 
             action={formAction} 
             onSubmit={(e) => {
+              setNameError(null);
+              setPhoneError(null);
+
+              const cleanName = customerName.trim();
+              const cleanPhone = customerPhone.trim();
+              let hasErr = false;
+
+              if (!cleanName || cleanName.length < 2) {
+                setNameError(isAr ? 'يرجى إدخال اسم المستلم (يقبل اسماً واحداً أو كاملاً، حرفين على الأقل)' : 'Please enter recipient name (at least 2 characters)');
+                hasErr = true;
+              }
+
+              if (!cleanPhone || cleanPhone.length < 8) {
+                setPhoneError(isAr ? 'يرجى إدخال رقم هاتف أردني صحيح (مثال: 07XXXXXXXX)' : 'Please enter a valid phone number');
+                hasErr = true;
+              }
+
+              if (hasErr) {
+                e.preventDefault();
+                setIsSubmittingLocal(false);
+                setIsCooldownActive(false);
+                return;
+              }
+
               if (isSubmittingLocal || isPending || isCooldownActive) {
                 e.preventDefault();
                 return;
@@ -189,44 +239,111 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             
             <div className="space-y-4">
               <div>
-                <label htmlFor="customerName" className="block text-sm font-medium text-zinc-700 mb-1">
-                  {isAr ? 'الاسم الكامل' : 'Full Name'}
-                </label>
+                <div className="flex justify-between items-center mb-1">
+                  <label htmlFor="customerName" className="block text-sm font-bold text-zinc-800">
+                    {isAr ? 'الاسم' : 'Name'}
+                    <span className="text-red-500 mr-1">*</span>
+                  </label>
+                  <span className="text-[11px] text-zinc-500 font-normal">
+                    {isAr ? '(يقبل اسماً واحداً أو كاملاً)' : '(Single name or full name)'}
+                  </span>
+                </div>
                 <input
                   type="text"
                   id="customerName"
                   name="customerName"
+                  value={customerName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomerName(val);
+                    if (nameError) setNameError(null);
+                    try {
+                      localStorage.setItem('ghazal_customer_info', JSON.stringify({
+                        name: val,
+                        phone: customerPhone,
+                        address: detailedAddress
+                      }));
+                    } catch {}
+                  }}
                   required
-                  className="w-full border border-zinc-300 rounded px-4 py-2 focus:ring-2 focus:ring-[var(--color-champagne-600)] outline-none"
+                  placeholder={isAr ? 'مثال: أحمد أو رغد أو سارة' : 'e.g. Sarah or full name'}
+                  className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none transition font-medium text-sm ${
+                    nameError 
+                      ? 'border-red-500 bg-red-50/30 text-red-900 focus:ring-2 focus:ring-red-400' 
+                      : 'border-zinc-300 bg-white focus:border-[#E6007E] focus:ring-2 focus:ring-[#E6007E]/20'
+                  }`}
                 />
+                {nameError && (
+                  <div className="flex items-center gap-1.5 mt-1.5 text-xs font-bold text-red-600 animate-fade-in">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                    <span>{nameError}</span>
+                  </div>
+                )}
               </div>
               
               <div>
-                <label htmlFor="customerPhone" className="block text-sm font-medium text-zinc-700 mb-1">
+                <label htmlFor="customerPhone" className="block text-sm font-bold text-zinc-800 mb-1">
                   {isAr ? 'رقم الهاتف (الأردن)' : 'Phone Number (Jordan)'}
+                  <span className="text-red-500 mr-1">*</span>
                 </label>
                 <input
                   type="tel"
                   id="customerPhone"
                   name="customerPhone"
+                  value={customerPhone}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomerPhone(val);
+                    if (phoneError) setPhoneError(null);
+                    try {
+                      localStorage.setItem('ghazal_customer_info', JSON.stringify({
+                        name: customerName,
+                        phone: val,
+                        address: detailedAddress
+                      }));
+                    } catch {}
+                  }}
                   required
                   dir="ltr"
                   placeholder="07XXXXXXXX"
-                  className="w-full border border-zinc-300 rounded px-4 py-2 text-right focus:ring-2 focus:ring-[var(--color-champagne-600)] outline-none"
+                  className={`w-full border-2 rounded-xl px-4 py-2.5 text-right outline-none transition font-medium text-sm ${
+                    phoneError 
+                      ? 'border-red-500 bg-red-50/30 text-red-900 focus:ring-2 focus:ring-red-400' 
+                      : 'border-zinc-300 bg-white focus:border-[#E6007E] focus:ring-2 focus:ring-[#E6007E]/20'
+                  }`}
                 />
+                {phoneError && (
+                  <div className="flex items-center gap-1.5 mt-1.5 text-xs font-bold text-red-600 animate-fade-in">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                    <span>{phoneError}</span>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label htmlFor="detailedAddress" className="block text-sm font-medium text-zinc-700 mb-1">
+                <label htmlFor="detailedAddress" className="block text-sm font-bold text-zinc-800 mb-1">
                   {isAr ? 'العنوان التفصيلي' : 'Detailed Address'}
+                  <span className="text-red-500 mr-1">*</span>
                 </label>
                 <textarea
                   id="detailedAddress"
                   name="detailedAddress"
+                  value={detailedAddress}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDetailedAddress(val);
+                    try {
+                      localStorage.setItem('ghazal_customer_info', JSON.stringify({
+                        name: customerName,
+                        phone: customerPhone,
+                        address: val
+                      }));
+                    } catch {}
+                  }}
                   required
                   rows={3}
                   placeholder={isAr ? 'المدينة، الحي، اسم الشارع، رقم البناية أو أي علامة مميزة لتسهيل وصول المندوب...' : 'City, district, street, building number or landmark...'}
-                  className="w-full border border-zinc-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-[#E6007E] focus:border-[#E6007E] outline-none text-sm"
+                  className="w-full border-2 border-zinc-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-[#E6007E]/20 focus:border-[#E6007E] outline-none text-sm transition"
                 />
               </div>
 
@@ -273,9 +390,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
               <button
                 type="submit"
                 disabled={isPending || isSubmittingLocal || isCooldownActive || cartItems.length === 0}
-                className="w-full bg-[var(--color-charcoal-900)] hover:bg-[var(--color-charcoal-800)] text-white font-bold py-4 rounded transition-colors disabled:opacity-50"
+                className="w-full bg-[#E6007E] hover:bg-[#c2006a] text-white font-black py-4 rounded-xl text-base shadow-lg transition-all active:scale-[0.99] disabled:opacity-50"
               >
-                {(isPending || isSubmittingLocal || isCooldownActive) ? (isAr ? 'جاري المعالجة...' : 'Processing...') : (isAr ? 'تأكيد الطلب عبر واتساب' : 'Confirm Order via WhatsApp')}
+                {(isPending || isSubmittingLocal || isCooldownActive) ? (isAr ? 'جاري تسجيل الطلب...' : 'Processing...') : (isAr ? 'تأكيد وإرسال الطلب' : 'Confirm & Submit Order')}
               </button>
             </div>
           </form>
@@ -329,23 +446,40 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
 
                 {/* Purchased Cart Items */}
                 {cartItems.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center border-b border-zinc-100 pb-4">
-                    <div>
-                      <h4 className="font-bold text-zinc-900">{item.name}</h4>
-                      <p className="text-xs text-zinc-500">
-                        {item.size} × {item.quantity}
+                  <div key={idx} className="flex justify-between items-center border-b border-zinc-100 pb-4 gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-zinc-50 border border-zinc-200 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                        <img 
+                          src={item.image || '/logo.png'} 
+                          alt={item.name} 
+                          className="w-full h-full object-contain"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-sm text-zinc-900 truncate">{item.name}</h4>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          {(item.variantLabel || item.colorName || item.scent || item.shade) && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 bg-pink-50 text-[#E6007E] border border-pink-200 rounded-md">
+                              {item.variantLabel || [item.scent ? `رائحة: ${item.scent}` : null, item.shade ? `درجة: ${item.shade}` : null, item.colorName].filter(Boolean).join(' - ')}
+                            </span>
+                          )}
+                          <span className="text-xs text-zinc-500 font-medium">
+                            {item.size ? `${item.size} × ` : ''}{item.quantity}
+                          </span>
+                        </div>
                         {item.stockStatus === 'UNVERIFIED' && (
-                          <span className="text-amber-600 font-bold ml-2">({isAr ? 'بانتظار تأكيد المخزن' : 'Pending verification'})</span>
+                          <span className="text-amber-600 font-bold block text-[10px] mt-0.5">({isAr ? 'بانتظار تأكيد المخزن' : 'Pending verification'})</span>
                         )}
-                      </p>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="font-bold text-zinc-700">
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <span className="font-bold text-sm text-zinc-800">
                         {filsToDisplay(item.price * item.quantity, isAr ? 'ar' : 'en')}
                       </span>
                       <button 
                         onClick={() => removeItem(idx)}
-                        className="text-xs text-red-400 hover:text-red-600 font-bold"
+                        className="text-[11px] text-red-400 hover:text-red-600 font-bold"
                         title={isAr ? 'حذف العنصر' : 'Remove item'}
                       >
                         {isAr ? 'حذف' : 'Remove'}

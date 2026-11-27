@@ -5,6 +5,9 @@ import { AdminSidebar } from '@/components/AdminSidebar';
 import { getSynchronizedCategories } from '@/actions/categories';
 import { AdminCategoriesClient } from './AdminCategoriesClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminCategoriesPage() {
   const session = await requireAuth();
 
@@ -13,7 +16,7 @@ export default async function AdminCategoriesPage() {
   let allProducts: any[] = [];
   try {
     allProducts = await prisma.product.findMany({
-      select: { id: true, nameAr: true, nameEn: true, category: { select: { name: true } }, categoryId: true },
+      select: { id: true, nameAr: true, nameEn: true, channel: true, category: { select: { name: true } }, categoryId: true },
       orderBy: { nameAr: 'asc' }
     });
   } catch (err) {
@@ -28,10 +31,10 @@ export default async function AdminCategoriesPage() {
         <div className="flex justify-between items-center mb-6 border-b border-[var(--color-ivory-200)] pb-4">
           <div>
             <h1 className="text-3xl font-black font-heading text-[var(--color-charcoal-900)]">
-              أقسام وتصنيفات المتجر
+              أقسام وتصنيفات المتجر والكاش
             </h1>
             <p className="text-zinc-600 mt-1 text-sm">
-              إدارة الهيكلية، السحب والإفلات لترتيب الأقسام، وإضافة أقسام فرعية مباشرة
+              تقسيم وإدارة أقسام المتجر الإلكتروني، أقسام الكاشير، والأقسام المشتركة مع رفع الصور وترتيب المنتجات
             </p>
           </div>
         </div>

@@ -9,6 +9,9 @@ import { getSynchronizedCategories } from '@/actions/categories';
 import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { notFound } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminProductEditPage({
   params
 }: {
@@ -45,7 +48,7 @@ export default async function AdminProductEditPage({
           similarProducts: { include: { similar: { include: { images: { where: { isMain: true }, take: 1 } } } }, orderBy: { order: 'asc' } },
         }
       }),
-      prisma.category.findMany({ orderBy: { name: 'asc' } }),
+      prisma.category.findMany({ select: { id: true, name: true, channel: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
       prisma.brand.findMany({ orderBy: { name: 'asc' } }),
       prisma.gender.findMany({ orderBy: { name: 'asc' } }),
       prisma.season.findMany({ orderBy: { name: 'asc' } }),
@@ -90,6 +93,7 @@ export default async function AdminProductEditPage({
     nameAr: product.nameAr,
     nameEn: product.nameEn || '',
     sku: product.sku,
+    channel: (product.channel as 'ONLINE' | 'POS' | 'SHARED') || 'POS',
     tag: assignedTag,
     shortDescription: product.shortDescription,
     longDescription: product.longDescription,
@@ -100,12 +104,13 @@ export default async function AdminProductEditPage({
     genderId: product.genderId,
     seasonId: product.seasonId,
     familyId: product.familyId,
+    variantType: product.variantType || null,
     variants: product.variants.map((v: any) => ({
       id: v.id,
       size: v.size,
       shade: v.shade || '',
       colorName: v.colorName || '',
-      colorHex: v.colorHex || '#E6007E',
+      colorHex: v.colorHex || '',
       barcode: v.barcode || '',
       sku: v.sku,
       price: v.price,
@@ -150,7 +155,7 @@ export default async function AdminProductEditPage({
         <ProductEditForm
           productId={product.id}
           initialData={initialData}
-          categories={categories.map(c => ({ id: c.id, name: c.name }))}
+          categories={categories.map(c => ({ id: c.id, name: c.name, channel: (c as any).channel || 'SHARED' }))}
           brands={brands.map(b => ({ id: b.id, name: b.name, nameAr: b.nameAr }))}
           genders={genders.map(g => ({ id: g.id, name: g.name }))}
           seasons={seasons.map(s => ({ id: s.id, name: s.name }))}

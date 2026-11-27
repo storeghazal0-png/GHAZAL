@@ -7,6 +7,7 @@ import { updateProduct } from '@/actions/products';
 import { Loader2, Plus, Trash2, Palette, Sparkles, Barcode, ScanLine, Upload, ImageIcon, Camera } from 'lucide-react';
 import { BarcodeSvg } from '@/components/BarcodeSvg';
 import { CameraBarcodeScannerModal } from '@/components/CameraBarcodeScannerModal';
+import { jodToFils, sanitizePriceInput } from '@/lib/money';
 
 interface CosmeticVariant {
   id?: string;
@@ -23,9 +24,12 @@ interface CosmeticVariant {
   isActive: boolean;
 }
 
+type ProductVariantType = 'SHADE' | 'SCENT' | 'SIZE' | 'NONE';
+
 interface Category {
   id: string;
   name: string;
+  channel?: 'ONLINE' | 'POS' | 'SHARED';
 }
 
 interface BrandOption {
@@ -68,6 +72,7 @@ interface ProductEditFormProps {
     nameAr: string;
     nameEn: string;
     sku: string;
+    channel?: 'ONLINE' | 'POS' | 'SHARED';
     shortDescription: string | null;
     longDescription: string | null;
     isVisible: boolean;
@@ -78,6 +83,7 @@ interface ProductEditFormProps {
     genderId?: string | null;
     seasonId?: string | null;
     familyId?: string | null;
+    variantType?: ProductVariantType | null;
     variants: CosmeticVariant[];
     images: ProductImage[];
     accords: AccordEntry[];
@@ -109,7 +115,10 @@ export function ProductEditForm({
   const [preview, setPreview] = useState<string | null>(null);
   const [productTag, setProductTag] = useState<string>(initialData.tag || '');
 
-  const initialVariantType = (): 'SHADE' | 'SCENT' | 'SIZE' | 'NONE' => {
+  const initialVariantType = (): ProductVariantType => {
+    if (initialData.variantType === 'SHADE' || initialData.variantType === 'SCENT' || initialData.variantType === 'SIZE' || initialData.variantType === 'NONE') {
+      return initialData.variantType;
+    }
     if (initialData.variants.some(v => v.shade || v.colorHex)) return 'SHADE';
     if (initialData.variants.some(v => v.size && v.size !== 'Standard')) return 'SIZE';
     if (initialData.variants.some(v => v.colorName && !v.shade && !v.colorHex)) return 'SCENT';
@@ -120,6 +129,36 @@ export function ProductEditForm({
   const [variantType, setVariantType] = useState<'SHADE' | 'SCENT' | 'SIZE' | 'NONE'>(initialVariantType);
   const [variants, setVariants] = useState<CosmeticVariant[]>(initialData.variants);
   const [activeScanIndex, setActiveScanIndex] = useState<number | null>(0);
+
+  // Channel State
+  const [channel, setChannel] = useState<'BOTH' | 'STOREFRONT' | 'POS'>(() => {
+    const raw = (initialData.channel || '').toUpperCase();
+    if (raw === 'ONLINE') return 'STOREFRONT';
+    if (raw === 'POS') return 'POS';
+    return 'BOTH';
+  });
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(initialData.categoryId || '');
+
+  // Filter categories according to the product's channel
+  const filteredCategories = React.useMemo(() => {
+    if (channel === 'STOREFRONT') {
+      return categories.filter(c => c.channel === 'ONLINE' || c.channel === 'SHARED' || !c.channel);
+    }
+    if (channel === 'POS') {
+      return categories.filter(c => c.channel === 'POS' || c.channel === 'SHARED' || !c.channel);
+    }
+    return categories.filter(c => c.channel === 'SHARED' || !c.channel);
+  }, [categories, channel]);
+
+  useEffect(() => {
+    if (filteredCategories.length > 0) {
+      if (!selectedCategoryId || !filteredCategories.some(c => c.id === selectedCategoryId)) {
+        setSelectedCategoryId(filteredCategories[0].id);
+      }
+    } else {
+      setSelectedCategoryId('');
+    }
+  }, [filteredCategories, selectedCategoryId]);
 
   // Camera Barcode Scanner State
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
@@ -307,7 +346,18 @@ export function ProductEditForm({
         isActive: v.isActive,
       }));
 
+      const targetChannelVal = channel === 'STOREFRONT' ? 'ONLINE' : (channel === 'POS' ? 'POS' : 'SHARED');
+      formData.set('channel', targetChannelVal);
+      formData.set('targetChannel', targetChannelVal);
+      formData.set('categoryId', selectedCategoryId);
+      if (channel === 'POS') {
+        formData.set('isVisible', 'false');
+      } else {
+        formData.set('isVisible', 'true');
+      }
+
       formData.set('variants', JSON.stringify(variantsForAction));
+      formData.set('variantType', variantType);
 
       const res = await updateProduct(productId, formData);
       if (res.success) {
@@ -330,6 +380,71 @@ export function ProductEditForm({
           {error}
         </div>
       )}
+
+      {/* Target Channel Selector */}
+      <div className="bg-pink-50/50 p-4 rounded-2xl border border-pink-200 space-y-2">
+        <label className="block text-xs font-black text-zinc-900">
+          قناة البيع المعتمدة للمنتج: *
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+            channel === 'BOTH' 
+              ? 'bg-white border-[#E6007E] shadow-xs ring-2 ring-[#E6007E]/20' 
+              : 'bg-white/60 border-zinc-200 hover:border-pink-300'
+          }`}>
+            <input 
+              type="radio" 
+              name="targetChannel" 
+              value="BOTH" 
+              checked={channel === 'BOTH'} 
+              onChange={() => setChannel('BOTH')}
+              className="mt-0.5 text-[#E6007E] focus:ring-[#E6007E]"
+            />
+            <div>
+              <span className="block text-xs font-bold text-zinc-900">كلاهما (المتجر + الكاش)</span>
+              <span className="text-[10px] text-zinc-500">يعرض بالموقع ويتوفر لنظام الكاشير</span>
+            </div>
+          </label>
+
+          <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+            channel === 'STOREFRONT' 
+              ? 'bg-white border-[#E6007E] shadow-xs ring-2 ring-[#E6007E]/20' 
+              : 'bg-white/60 border-zinc-200 hover:border-pink-300'
+          }`}>
+            <input 
+              type="radio" 
+              name="targetChannel" 
+              value="STOREFRONT" 
+              checked={channel === 'STOREFRONT'} 
+              onChange={() => setChannel('STOREFRONT')}
+              className="mt-0.5 text-[#E6007E] focus:ring-[#E6007E]"
+            />
+            <div>
+              <span className="block text-xs font-bold text-zinc-900">المتجر الإلكتروني فقط</span>
+              <span className="text-[10px] text-zinc-500">خاص بطلبات الموقع والشحن</span>
+            </div>
+          </label>
+
+          <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+            channel === 'POS' 
+              ? 'bg-white border-[#E6007E] shadow-xs ring-2 ring-[#E6007E]/20' 
+              : 'bg-white/60 border-zinc-200 hover:border-pink-300'
+          }`}>
+            <input 
+              type="radio" 
+              name="targetChannel" 
+              value="POS" 
+              checked={channel === 'POS'} 
+              onChange={() => setChannel('POS')}
+              className="mt-0.5 text-[#E6007E] focus:ring-[#E6007E]"
+            />
+            <div>
+              <span className="block text-xs font-bold text-[#E6007E]">نظام الكاشير فقط (POS)</span>
+              <span className="text-[10px] text-zinc-500">خاص بنقاط البيع بالمحل (مخفي عن الموقع)</span>
+            </div>
+          </label>
+        </div>
+      </div>
 
       {/* Basic Info */}
       <div className="space-y-4">
@@ -365,19 +480,38 @@ export function ProductEditForm({
         <input type="hidden" name="sku" value={initialData.sku} />
 
         <div>
-          <label className="block text-xs font-bold text-zinc-700 mb-1.5">التصنيف / القسم *</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold text-zinc-700">التصنيف / القسم *</label>
+            <span className="text-[11px] text-zinc-500 font-medium">
+              (تظهر الأقسام المتوافقة مع: <strong className="text-[#E6007E]">{channel === 'STOREFRONT' ? 'المتجر الإلكتروني' : channel === 'POS' ? 'نظام الكاشير' : 'الأقسام المشتركة'}</strong>)
+            </span>
+          </div>
           <select
             name="categoryId"
-            defaultValue={initialData.categoryId || (categories[0]?.id ?? '')}
             required
-            className="w-full border border-zinc-300 rounded-xl px-3.5 py-2 text-sm outline-none bg-white focus:border-[#E6007E]"
+            value={selectedCategoryId}
+            onChange={(e) => setSelectedCategoryId(e.target.value)}
+            className="w-full border border-zinc-300 rounded-xl px-3.5 py-2.5 text-sm outline-none bg-white focus:border-[#E6007E] font-medium"
           >
-              <option value="">-- اختر التصنيف --</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+            {filteredCategories.length === 0 ? (
+              <option value="">-- لا توجد أقسام متوافقة مع هذه القناة حالياً --</option>
+            ) : (
+              filteredCategories.map(c => {
+                const badge = c.channel === 'ONLINE' ? '🌐 متجر' : c.channel === 'POS' ? '🏪 كاش' : '🔄 مشترك';
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({badge})
+                  </option>
+                );
+              })
+            )}
+          </select>
+          {filteredCategories.length === 0 && (
+            <p className="text-xs text-amber-600 mt-1.5 font-bold">
+              يرجى التوجه لصفحة أقسام المتجر والكاش لإنشاء قسم مخصص أو قسم مشترك لهذه القناة.
+            </p>
+          )}
+        </div>
 
         <div>
           <label className="block text-xs font-bold text-zinc-700 mb-1.5">
@@ -690,49 +824,61 @@ export function ProductEditForm({
                   )}
                 </div>
 
-                {/* Price (in Fils / JOD) & Cost Price */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white p-3.5 rounded-xl border-2 border-zinc-300 focus-within:!border-[#E6007E] focus-within:ring-2 focus-within:ring-[#E6007E]/20 transition-all shadow-xs">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-black text-zinc-900">سعر البيع الحالي (فلس / د.أ) *</label>
-                      <span className="text-xs font-bold text-[#E6007E] bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100 font-mono">
+                {/* Price (entered in JOD, stored internally in fils) & Cost Price */}
+                <div className="sm:col-span-2 lg:col-span-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="min-w-0 bg-white p-4 rounded-2xl border-2 border-zinc-300 focus-within:!border-[#E6007E] focus-within:ring-2 focus-within:ring-[#E6007E]/20 transition-all shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                      <label className="block text-sm font-black text-zinc-900">سعر البيع الحالي *</label>
+                      <span className="self-start sm:self-auto whitespace-nowrap text-xs font-bold text-[#E6007E] bg-pink-50 px-2.5 py-1 rounded-lg border border-pink-100 font-mono">
                         = {(v.price / 1000).toFixed(3)} د.أ
                       </span>
                     </div>
-                    <input
-                      type="number"
-                      value={v.price}
-                      onChange={e => updateVariant(i, 'price', parseInt(e.target.value) || 0)}
-                      required
-                      placeholder="5000"
-                      className="w-full h-11 border border-zinc-300 rounded-lg px-3 py-2 text-base font-black font-mono outline-none focus:border-[#E6007E] bg-zinc-50/50 focus:bg-white text-zinc-900 transition"
-                      dir="ltr"
-                    />
-                    <span className="text-[11px] text-zinc-500 block mt-1.5 font-bold">
-                      سعر البيع المعتمد للزبائن
+                    <div className="relative">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.001"
+                        min="0"
+                        value={(v.price / 1000).toFixed(3)}
+                        onChange={e => updateVariant(i, 'price', jodToFils(sanitizePriceInput(e.target.value)))}
+                        required
+                        placeholder="2.500"
+                        className="w-full h-14 border-2 border-zinc-300 rounded-xl ps-3 pe-16 py-2 text-xl font-black font-mono outline-none focus:border-[#E6007E] bg-zinc-50/50 focus:bg-white text-zinc-900 transition"
+                        dir="ltr"
+                      />
+                      <span className="absolute inset-y-0 end-3 flex items-center text-xs font-black text-zinc-600 pointer-events-none">د.أ</span>
+                    </div>
+                    <span className="text-[11px] text-zinc-500 block mt-2 leading-relaxed font-bold">
+                      سعر البيع المعتمد للزبائن — يحفظ داخليًا: {Math.round(v.price || 0)} فلس
                     </span>
                   </div>
 
-                  <div className="bg-amber-50/30 p-3.5 rounded-xl border-2 border-amber-300 focus-within:!border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all shadow-xs">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-black text-amber-900">سعر التكلفة علينا (فلس / د.أ)</label>
-                      <span className="text-xs font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300 font-mono">
+                  <div className="min-w-0 bg-amber-50/30 p-4 rounded-2xl border-2 border-amber-300 focus-within:!border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                      <label className="block text-sm font-black text-amber-900">سعر التكلفة علينا</label>
+                      <span className="self-start sm:self-auto whitespace-nowrap text-xs font-bold text-amber-800 bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-300 font-mono">
                         = {((v.costPrice !== undefined ? v.costPrice : Math.round(v.price * 0.55)) / 1000).toFixed(3)} د.أ
                       </span>
                     </div>
-                    <input
-                      type="number"
-                      value={v.costPrice !== undefined ? v.costPrice : Math.round(v.price * 0.55)}
-                      onChange={e => updateVariant(i, 'costPrice', parseInt(e.target.value) || 0)}
-                      placeholder="2750"
-                      className="w-full h-11 border border-amber-300 bg-white rounded-lg px-3 py-2 text-base font-black font-mono outline-none focus:border-amber-500 text-zinc-900 transition"
-                      dir="ltr"
-                    />
-                    <span className="text-[11px] text-amber-800 block mt-1.5 font-bold">
+                    <div className="relative">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.001"
+                        min="0"
+                        value={((v.costPrice !== undefined ? v.costPrice : Math.round(v.price * 0.55)) / 1000).toFixed(3)}
+                        onChange={e => updateVariant(i, 'costPrice', jodToFils(sanitizePriceInput(e.target.value)))}
+                        placeholder="1.375"
+                        className="w-full h-14 border-2 border-amber-300 bg-white rounded-xl ps-3 pe-16 py-2 text-xl font-black font-mono outline-none focus:border-amber-500 text-amber-950 transition"
+                        dir="ltr"
+                      />
+                      <span className="absolute inset-y-0 end-3 flex items-center text-xs font-black text-amber-800 pointer-events-none">د.أ</span>
+                    </div>
+                    <span className="text-[11px] text-amber-800 block mt-2 leading-relaxed font-bold">
                       {v.price && v.costPrice !== undefined && v.price > v.costPrice ? (
                         `هامش ربح تقريبي: +${((v.price - v.costPrice) / 1000).toFixed(3)} د.أ`
                       ) : (
-                        'تكلفة الشراء والتوريد للقطعة'
+                        `تكلفة الشراء والتوريد للقطعة — يحفظ داخليًا: ${Math.round(v.costPrice !== undefined ? v.costPrice : v.price * 0.55)} فلس`
                       )}
                     </span>
                   </div>

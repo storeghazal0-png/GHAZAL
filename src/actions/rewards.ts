@@ -5,6 +5,7 @@ import { requireAuth, requirePermission } from '@/lib/dal';
 import { revalidatePath } from 'next/cache';
 
 export type RewardType = 'FREE_GIFT' | 'FREE_SHIPPING' | 'FIXED_DISCOUNT' | 'PERCENTAGE_DISCOUNT';
+export type RewardScope = 'ALL_PRODUCTS' | 'SPECIFIC_PRODUCTS';
 export type GiftMode = 'FIXED_PRODUCT' | 'CUSTOMER_CHOICE';
 export type OutOfStockPolicy = 'AUTO_PAUSE' | 'FALLBACK_COSMETIC_GIFT';
 export type SpendCalculationBasis = 'ITEMS_BEFORE_DISCOUNT' | 'ITEMS_AFTER_DISCOUNT';
@@ -41,16 +42,25 @@ export interface GiftProductInfo {
   id: string;
   nameAr: string;
   sku: string;
+  barcode?: string;
   imageUrl?: string;
   price: number; // in fils
   costPrice?: number; // in fils
   stock: number;
 }
 
+export type RewardProductInfo = GiftProductInfo;
+
 export interface RewardRule {
   id: string;
   title: string;
   rewardType: RewardType;
+  channel?: 'ONLINE' | 'POS' | 'BOTH';
+
+  // Target products scope for discounts
+  targetScope?: RewardScope;
+  targetProductIds?: string[];
+  targetProductsInfo?: RewardProductInfo[];
   
   // Gift settings
   giftMode?: GiftMode;
@@ -105,29 +115,113 @@ export interface RewardRedemptionRecord {
   reversalReason?: string;
 }
 
-// Fetch gift products directly from PostgreSQL database
-async function getCatalogGiftProducts(ids: string[]): Promise<GiftProductInfo[]> {
+// Fetch products info directly from PostgreSQL database
+async function getCatalogProductsInfo(ids: string[]): Promise<RewardProductInfo[]> {
   if (!ids || ids.length === 0) return [];
   try {
     const products = await prisma.product.findMany({
       where: { id: { in: ids } },
-      include: {
-        images: { orderBy: { isMain: 'desc' }, take: 1 },
-        variants: true
+      select: {
+        id: true,
+        nameAr: true,
+        sku: true,
+        images: { select: { url: true }, orderBy: { isMain: 'desc' }, take: 1 },
+        variants: { select: { price: true, costPrice: true, barcode: true } }
       }
     });
-    return products.map((prod: any) => ({
-      id: prod.id,
-      nameAr: prod.nameAr,
-      sku: prod.sku || '',
-      imageUrl: prod.images?.[0]?.url || '/product-placeholder.png',
-      price: prod.variants?.[0]?.price || 0,
-      costPrice: Math.round((prod.variants?.[0]?.price || 0) * 0.55),
-      stock: prod.variants?.reduce((sum: number, v: any) => sum + (v.stock || 0), 0) ?? 0
-    }));
+    return products.map((prod: any) => {
+      const variantBarcodes = (prod.variants || [])
+        .map((v: any) => v.barcode)
+        .filter((b: any): b is string => Boolean(b && typeof b === 'string' && b.trim().length > 0));
+      const primaryBarcode = variantBarcodes[0] || '';
+      const minPrice = prod.variants?.length ? Math.min(...prod.variants.map((v: any) => v.price)) : 0;
+      const costPrice = prod.variants?.[0]?.costPrice || Math.round(minPrice * 0.55);
+
+      return {
+        id: prod.id,
+        nameAr: prod.nameAr,
+        sku: prod.sku || '',
+        barcode: primaryBarcode,
+        imageUrl: prod.images?.[0]?.url || '/product-placeholder.png',
+        price: minPrice,
+        costPrice,
+        stock: 99
+      };
+    });
   } catch (err) {
-    console.warn('Error fetching gift products from DB:', err);
+    console.warn('Error fetching products info from DB:', err);
     return [];
+  }
+}
+
+const getCatalogGiftProducts = getCatalogProductsInfo;
+
+// Synchronize targeted product discount rules with ghazal_promotions (so they appear in POS Cashier and Storefront)
+async function syncRewardPromotions(rules: RewardRule[]): Promise<void> {
+  try {
+    let currentPromotions: any[] = [];
+    const setting = await prisma.siteSettings.findUnique({
+      where: { key: 'ghazal_promotions' }
+    });
+    if (setting?.value) {
+      try {
+        const parsed = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) currentPromotions = parsed;
+      } catch {}
+    }
+
+    // Remove old promotions synced from rewards
+    currentPromotions = currentPromotions.filter(p => !p.id.startsWith('rew-promo-'));
+
+    // Add active targeted promotions
+    for (const rule of rules) {
+      if (
+        (rule.rewardType === 'FIXED_DISCOUNT' || rule.rewardType === 'PERCENTAGE_DISCOUNT') &&
+        rule.targetScope === 'SPECIFIC_PRODUCTS' &&
+        rule.targetProductIds &&
+        rule.targetProductIds.length > 0 &&
+        rule.isActive &&
+        rule.status === 'ACTIVE'
+      ) {
+        const promoChannel: 'STOREFRONT' | 'POS' | 'BOTH' = 
+          rule.channel === 'ONLINE' ? 'STOREFRONT' : 
+          rule.channel === 'POS' ? 'POS' : 'BOTH';
+        const discountType: 'FIXED' | 'PERCENTAGE' = rule.rewardType === 'FIXED_DISCOUNT' ? 'FIXED' : 'PERCENTAGE';
+
+        for (const prodId of rule.targetProductIds) {
+          const prodInfo = rule.targetProductsInfo?.find(p => p.id === prodId);
+          currentPromotions.push({
+            id: `rew-promo-${rule.id}-${prodId}`,
+            code: `REW-${rule.id.slice(-4)}-${prodId.slice(-4)}`,
+            title: rule.title,
+            targetProductId: prodId,
+            targetProductName: prodInfo?.nameAr || '',
+            channel: promoChannel,
+            discountType,
+            discountValue: rule.discountValue,
+            calculatedPercentage: rule.rewardType === 'PERCENTAGE_DISCOUNT' ? rule.discountValue : undefined,
+            maxDiscountFils: rule.maxDiscountFils,
+            minOrderTotalFils: rule.minSpendFils,
+            startsAt: rule.startsAt,
+            endsAt: rule.endsAt || new Date(Date.now() + 86400000 * 365).toISOString(),
+            usageCount: rule.currentUsageCount,
+            usageLimit: rule.totalUsageLimit,
+            isActive: true,
+            createdAt: rule.createdAt || new Date().toISOString()
+          });
+        }
+      }
+    }
+
+    await prisma.siteSettings.upsert({
+      where: { key: 'ghazal_promotions' },
+      update: { value: JSON.stringify(currentPromotions) },
+      create: { key: 'ghazal_promotions', value: JSON.stringify(currentPromotions) }
+    });
+
+    (globalThis as any).__ghazal_resilient_promotions = currentPromotions;
+  } catch (err) {
+    console.warn('Failed to sync reward promotions with ghazal_promotions:', err);
   }
 }
 
@@ -241,12 +335,7 @@ function computeRuleStatus(rule: RewardRule): { status: RuleStatus; reasonAr: st
   if (rule.totalUsageLimit && rule.currentUsageCount >= rule.totalUsageLimit) {
     return { status: 'LIMIT_REACHED', reasonAr: `استُنفد حد الاستخدام الإجمالي للحملة (${rule.currentUsageCount}/${rule.totalUsageLimit})` };
   }
-  if (rule.rewardType === 'FREE_GIFT') {
-    const hasAnyStock = rule.giftProductsInfo.some(p => p.stock > 0);
-    if (!hasAnyStock && rule.giftProductsInfo.length > 0) {
-      return { status: 'GIFT_OUT_OF_STOCK', reasonAr: 'متوقفة تلقائياً بسبب نفاد مخزون جميع الهدايا المرتبطة' };
-    }
-  }
+  // For FREE_GIFT rules: inventory is not tracked for promotional gifts, so gift rules are never paused due to zero stock
   return { status: 'ACTIVE', reasonAr: 'القاعدة نشطة ومؤهلة للتطبيق فوراً في السلة' };
 }
 
@@ -262,6 +351,9 @@ export async function createOrUpdateRewardRuleAction(data: {
   id?: string;
   title: string;
   rewardType: RewardType;
+  channel?: 'ONLINE' | 'POS' | 'BOTH';
+  targetScope?: RewardScope;
+  targetProductIds?: string[];
   giftMode?: GiftMode;
   giftProductIds?: string[];
   outOfStockPolicy?: OutOfStockPolicy;
@@ -285,6 +377,10 @@ export async function createOrUpdateRewardRuleAction(data: {
   const giftProductIds = data.giftProductIds || [];
   const giftProductsInfo = await getCatalogGiftProducts(giftProductIds);
 
+  const targetScope = data.targetScope || 'ALL_PRODUCTS';
+  const targetProductIds = data.targetProductIds || [];
+  const targetProductsInfo = targetScope === 'SPECIFIC_PRODUCTS' ? await getCatalogProductsInfo(targetProductIds) : [];
+
   const cleanStartsAt = data.startsAt ? new Date(data.startsAt).toISOString() : new Date().toISOString();
   const cleanEndsAt = data.endsAt ? new Date(data.endsAt).toISOString() : undefined;
 
@@ -296,6 +392,10 @@ export async function createOrUpdateRewardRuleAction(data: {
         ...existing,
         title: data.title.trim(),
         rewardType: data.rewardType,
+        channel: data.channel || existing.channel || 'ONLINE',
+        targetScope,
+        targetProductIds,
+        targetProductsInfo,
         giftMode: data.rewardType === 'FREE_GIFT' ? (data.giftMode || 'FIXED_PRODUCT') : undefined,
         giftProductIds,
         giftProductsInfo,
@@ -326,6 +426,10 @@ export async function createOrUpdateRewardRuleAction(data: {
       id: `rew-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       title: data.title.trim(),
       rewardType: data.rewardType,
+      channel: data.channel || 'ONLINE',
+      targetScope,
+      targetProductIds,
+      targetProductsInfo,
       giftMode: data.rewardType === 'FREE_GIFT' ? (data.giftMode || 'FIXED_PRODUCT') : undefined,
       giftProductIds,
       giftProductsInfo,
@@ -355,7 +459,11 @@ export async function createOrUpdateRewardRuleAction(data: {
   }
 
   await saveRulesStore(rules);
+  await syncRewardPromotions(rules);
   revalidatePath('/admin/rewards');
+  revalidatePath('/admin/promotions');
+  revalidatePath('/pos/cashier');
+  revalidatePath('/[locale]/shop', 'page');
   return { success: true, rules: await getAllRewardRulesAction() };
 }
 
@@ -371,7 +479,10 @@ export async function toggleRewardRuleStatusAction(ruleId: string) {
   rule.statusReasonAr = reasonAr;
 
   await saveRulesStore(rules);
+  await syncRewardPromotions(rules);
   revalidatePath('/admin/rewards');
+  revalidatePath('/admin/promotions');
+  revalidatePath('/pos/cashier');
   return { success: true, rule };
 }
 
@@ -382,8 +493,11 @@ export async function deleteRewardRuleAction(ruleId: string) {
   if (idx !== -1) {
     rules.splice(idx, 1);
     await saveRulesStore(rules);
+    await syncRewardPromotions(rules);
   }
   revalidatePath('/admin/rewards');
+  revalidatePath('/admin/promotions');
+  revalidatePath('/pos/cashier');
   return { success: true };
 }
 
@@ -486,20 +600,24 @@ export async function evaluateCartRewardsAction(params: {
   subtotalFils: number;
   shippingFeeFils: number;
   selectedGiftId?: string;
+  channel?: 'ONLINE' | 'POS';
+  items?: Array<{ productId?: string; priceFils?: number; price?: number; quantity?: number }>;
 }): Promise<RewardEvaluationResult> {
-  const { subtotalFils, shippingFeeFils, selectedGiftId } = params;
+  const { subtotalFils, shippingFeeFils, selectedGiftId, channel = 'ONLINE', items = [] } = params;
   const settings = await getRewardSystemSettingsAction();
   const allRules = await getAllRewardRulesAction();
 
-  // Filter only ACTIVE rules
-  const activeRules = allRules.filter(r => r.status === 'ACTIVE' && r.isActive);
+  // Filter only ACTIVE rules matching target channel (ONLINE vs POS vs BOTH)
+  const activeRules = allRules.filter(r => {
+    if (r.status !== 'ACTIVE' || !r.isActive) return false;
+    if (r.channel && r.channel !== 'BOTH' && r.channel !== channel) return false;
+    return true;
+  });
 
-  // Determine qualified rules
+  // Determine qualified rules based directly on product items value (subtotalFils)
   const qualifiedRules: RewardRule[] = [];
   for (const rule of activeRules) {
-    const thresholdSpend = rule.includesShippingInThreshold || settings.minSpendCalculation === 'ITEMS_AND_SHIPPING'
-      ? subtotalFils + shippingFeeFils
-      : subtotalFils;
+    const thresholdSpend = subtotalFils;
 
     if (thresholdSpend >= rule.minSpendFils) {
       qualifiedRules.push(rule);
@@ -538,8 +656,8 @@ export async function evaluateCartRewardsAction(params: {
         notificationMessages.push(upgradedGiftNote);
       }
 
-      // Check gift selection from the top rule
-      const topGifts = topRule.giftProductsInfo.filter(g => g.stock > 0);
+      // Check gift selection from the top rule (inventory not tracked for gifts, never blocked by zero stock)
+      const topGifts = topRule.giftProductsInfo;
       if (topGifts.length > 0) {
         if (selectedGiftId) {
           const chosen = topGifts.find(g => g.id === selectedGiftId || g.sku === selectedGiftId);
@@ -552,7 +670,7 @@ export async function evaluateCartRewardsAction(params: {
     } else if (settings.multiGiftResolution === 'STACK_ALL_GIFTS') {
       // Add a gift from every qualified rule
       for (const rule of qualifiedGiftRules) {
-        const available = rule.giftProductsInfo.find(g => g.stock > 0);
+        const available = rule.giftProductsInfo[0];
         if (available) {
           appliedGiftsList.push(available);
         }
@@ -574,7 +692,10 @@ export async function evaluateCartRewardsAction(params: {
   // 2. Evaluate FREE_SHIPPING rules
   const qualifiedShippingRules = qualifiedRules.filter(r => r.rewardType === 'FREE_SHIPPING');
   if (qualifiedShippingRules.length > 0) {
-    if (settings.freeShippingStacking === 'ALLOW_WITH_GIFTS' || qualifiedGiftRules.length === 0) {
+    const shippingRule = qualifiedShippingRules[0];
+    const canStackWithGift = shippingRule.isStackable || settings.freeShippingStacking === 'ALLOW_WITH_GIFTS' || qualifiedGiftRules.length === 0;
+
+    if (canStackWithGift) {
       freeShippingApplied = true;
       freeShippingSavingsFils = shippingFeeFils;
       notificationMessages.push('✓ مؤهلة لخصم التوصيل المجاني لكافة محافظات المملكة!');
@@ -594,23 +715,52 @@ export async function evaluateCartRewardsAction(params: {
   // 3. Evaluate DISCOUNT rules
   const qualifiedDiscountRules = qualifiedRules.filter(r => r.rewardType === 'FIXED_DISCOUNT' || r.rewardType === 'PERCENTAGE_DISCOUNT');
   if (qualifiedDiscountRules.length > 0) {
-    if (settings.allowDiscountWithGift || appliedGift === null) {
-      // Sort discounts by calculated discount value descending
-      const evaluatedDiscounts = qualifiedDiscountRules.map(rule => {
-        let val = 0;
+    // Sort discounts by calculated discount value descending
+    const evaluatedDiscounts = qualifiedDiscountRules.map(rule => {
+      let val = 0;
+      let eligibleSpendFils = subtotalFils;
+
+      // If this rule targets specific products, calculate only on matching items in the cart
+      if (rule.targetScope === 'SPECIFIC_PRODUCTS' && rule.targetProductIds && rule.targetProductIds.length > 0) {
+        if (items && items.length > 0) {
+          const matchingItems = items.filter(item => 
+            item.productId && rule.targetProductIds!.includes(item.productId)
+          );
+          eligibleSpendFils = matchingItems.reduce((sum, item) => {
+            const p = item.priceFils !== undefined ? item.priceFils : (item.price || 0);
+            return sum + (p * (item.quantity || 1));
+          }, 0);
+        }
+      }
+
+      if (eligibleSpendFils > 0) {
         if (rule.rewardType === 'FIXED_DISCOUNT') {
-          val = rule.discountValue;
+          val = Math.min(eligibleSpendFils, rule.discountValue);
         } else {
-          val = Math.round(subtotalFils * (rule.discountValue / 100));
+          val = Math.round(eligibleSpendFils * (rule.discountValue / 100));
           if (rule.maxDiscountFils) val = Math.min(val, rule.maxDiscountFils);
         }
-        return { rule, val };
-      }).sort((a, b) => b.val - a.val);
+      }
+      return { rule, val };
+    }).sort((a, b) => b.val - a.val);
 
-      if (evaluatedDiscounts.length > 0 && evaluatedDiscounts[0].val > 0) {
-        appliedDiscountRule = evaluatedDiscounts[0].rule;
-        discountAmountFils = evaluatedDiscounts[0].val;
+    const topDiscount = evaluatedDiscounts[0];
+    if (topDiscount && topDiscount.val > 0) {
+      const canStackDiscountWithGift = topDiscount.rule.isStackable || settings.allowDiscountWithGift || appliedGift === null;
+      if (canStackDiscountWithGift) {
+        appliedDiscountRule = topDiscount.rule;
+        discountAmountFils = topDiscount.val;
         notificationMessages.push(`تم تطبيق خصم مكافأة بقيمة ${(discountAmountFils / 1000).toFixed(3)} د.أ`);
+      } else {
+        // Compare discount value vs gift value
+        const giftValue = appliedGift ? appliedGift.price : 0;
+        if (topDiscount.val > giftValue) {
+          appliedDiscountRule = topDiscount.rule;
+          discountAmountFils = topDiscount.val;
+          appliedGift = null;
+          appliedGiftsList.length = 0;
+          notificationMessages.push(`تم تطبيق خصم مكافأة بقيمة ${(discountAmountFils / 1000).toFixed(3)} د.أ`);
+        }
       }
     }
   }

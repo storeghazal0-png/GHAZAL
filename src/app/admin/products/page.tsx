@@ -9,6 +9,9 @@ import { AdminProductsClient } from './AdminProductsClient';
 import { filsToDisplay } from '@/lib/money';
 import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminProductsPage({
   searchParams
 }: {
@@ -56,7 +59,8 @@ export default async function AdminProductsPage({
       }
     });
     categories = await prisma.category.findMany({
-      select: { id: true, name: true }
+      select: { id: true, name: true, channel: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }]
     });
   } catch (err) {
     console.warn('Prisma product query skipped:', err);

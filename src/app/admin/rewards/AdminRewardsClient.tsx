@@ -7,10 +7,12 @@ import {
   Edit3, X, RefreshCw, ShoppingBag, Truck, DollarSign, Filter, Trash2, 
   AlertCircle, Check, Clock, ChevronDown, Layers, HelpCircle, Eye,
   ArrowRight, Users, TrendingUp, BarChart3, AlertTriangle,
-  Sliders, Settings
+  Sliders, Settings, Camera
 } from 'lucide-react';
+import { CameraBarcodeScannerModal } from '@/components/CameraBarcodeScannerModal';
 import { 
   RewardRule, 
+  RewardScope,
   RewardRedemptionRecord, 
   RewardType, 
   GiftMode, 
@@ -27,11 +29,19 @@ import {
   updateRewardSystemSettingsAction,
   reverseRedemptionForOrderAction
 } from '@/actions/rewards';
+import { SyncedCategory } from '@/actions/categories';
 
 interface ProductItem {
   id: string;
   nameAr: string;
   sku: string;
+  barcode?: string;
+  barcodes?: string[];
+  channel?: string;
+  categoryId?: string;
+  categoryName?: string;
+  categorySlug?: string;
+  categoryParentId?: string | null;
   imageUrl?: string;
   price: number;
   costPrice?: number;
@@ -61,6 +71,7 @@ interface Props {
     };
   };
   availableProducts: ProductItem[];
+  categories?: SyncedCategory[];
 }
 
 const getInitialTab = (param?: string): 'RULES' | 'REDEMPTIONS' => {
@@ -72,7 +83,7 @@ const getInitialTab = (param?: string): 'RULES' | 'REDEMPTIONS' => {
   return 'RULES';
 };
 
-export default function AdminRewardsClient({ initialTabParam, initialData, availableProducts }: Props) {
+export default function AdminRewardsClient({ initialTabParam, initialData, availableProducts, categories = [] }: Props) {
   const [activeTab, setActiveTab] = useState<'RULES' | 'REDEMPTIONS'>(() => getInitialTab(initialTabParam));
   const [data, setData] = useState(initialData);
   const [selectedPeriod, setSelectedPeriod] = useState(initialData.periodFilter);
@@ -82,6 +93,13 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
   // Search & Filter for Rules
   const [rulesSearch, setRulesSearch] = useState('');
   const [rulesTypeFilter, setRulesTypeFilter] = useState<string>('ALL');
+  const [rulesCategoryFilter, setRulesCategoryFilter] = useState<string>('ALL');
+
+  // Categories & Subcategories State for Modals
+  const [discountSelectedCatId, setDiscountSelectedCatId] = useState<string>('ALL');
+  const [discountSelectedSubCatId, setDiscountSelectedSubCatId] = useState<string>('ALL');
+  const [giftSelectedCatId, setGiftSelectedCatId] = useState<string>('ALL');
+  const [giftSelectedSubCatId, setGiftSelectedSubCatId] = useState<string>('ALL');
 
   // Search & Filter for Redemptions
   const [redemptionsSearch, setRedemptionsSearch] = useState('');
@@ -97,6 +115,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
 
   // Form Fields
   const [formTitle, setFormTitle] = useState('');
+  const [formChannel, setFormChannel] = useState<'ONLINE' | 'POS' | 'BOTH'>('ONLINE');
   const [formRewardType, setFormRewardType] = useState<RewardType>('FREE_GIFT');
   const [formGiftMode, setFormGiftMode] = useState<GiftMode>('FIXED_PRODUCT');
   const [formGiftProductIds, setFormGiftProductIds] = useState<string[]>([]);
@@ -117,6 +136,14 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
 
   // Gift Product Browser inside Modal
   const [giftPickerSearch, setGiftPickerSearch] = useState('');
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+
+  // Specific Product Discount State inside Modal
+  const [formTargetScope, setFormTargetScope] = useState<RewardScope>('ALL_PRODUCTS');
+  const [formTargetProductIds, setFormTargetProductIds] = useState<string[]>([]);
+  const [discountProductSearch, setDiscountProductSearch] = useState('');
+  const [isDiscountCameraScannerOpen, setIsDiscountCameraScannerOpen] = useState(false);
+  const [discountScannerFeedback, setDiscountScannerFeedback] = useState<string | null>(null);
 
   // Selected Order Details View Modal
   const [selectedRedemptionOrder, setSelectedRedemptionOrder] = useState<RewardRedemptionRecord | null>(null);
@@ -126,7 +153,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     initialData.settings || {
       multiGiftResolution: 'HIGHEST_TIER_ONLY',
       freeShippingStacking: 'ALLOW_WITH_GIFTS',
-      allowDiscountWithGift: false,
+      allowDiscountWithGift: true,
       minSpendCalculation: 'ITEMS_ONLY'
     }
   );
@@ -188,13 +215,30 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     }
   };
 
+  const handleChannelChange = (newChannel: 'ONLINE' | 'POS' | 'BOTH') => {
+    setFormChannel(newChannel);
+    if (newChannel === 'POS') {
+      setFormRewardType('PERCENTAGE_DISCOUNT');
+    }
+  };
+
   const handleOpenAddModal = () => {
     setEditingRule(null);
     setFormTitle('');
+    setFormChannel('ONLINE');
     setFormRewardType('FREE_GIFT');
     setFormGiftMode('FIXED_PRODUCT');
-    setFormGiftProductIds(availableProducts.length > 0 ? [availableProducts[0].id] : []);
+    const onlineProducts = availableProducts.filter(p => p.channel !== 'POS');
+    setFormGiftProductIds(onlineProducts.length > 0 ? [onlineProducts[0].id] : []);
     setFormOutOfStockPolicy('AUTO_PAUSE');
+    setFormTargetScope('ALL_PRODUCTS');
+    setFormTargetProductIds([]);
+    setDiscountProductSearch('');
+    setDiscountScannerFeedback(null);
+    setDiscountSelectedCatId('ALL');
+    setDiscountSelectedSubCatId('ALL');
+    setGiftSelectedCatId('ALL');
+    setGiftSelectedSubCatId('ALL');
     setFormDiscountValue('5.000');
     setFormMaxDiscount('');
     setFormMinSpend('35.000');
@@ -208,6 +252,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     setFormStartsAt(new Date().toISOString().split('T')[0]);
     setFormEndsAt(new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0]);
     setFormIsActive(true);
+    setGiftPickerSearch('');
     setErrors({});
     setIsModalOpen(true);
   };
@@ -215,12 +260,22 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
   const handleOpenEditModal = (rule: RewardRule) => {
     setEditingRule(rule);
     setFormTitle(rule.title);
-    setFormRewardType(rule.rewardType);
+    setFormChannel(rule.channel || 'ONLINE');
+    const effectiveRewardType = rule.channel === 'POS' ? 'PERCENTAGE_DISCOUNT' : rule.rewardType;
+    setFormRewardType(effectiveRewardType);
+    setFormTargetScope(rule.targetScope || 'ALL_PRODUCTS');
+    setFormTargetProductIds(rule.targetProductIds || []);
+    setDiscountProductSearch('');
+    setDiscountScannerFeedback(null);
+    setDiscountSelectedCatId('ALL');
+    setDiscountSelectedSubCatId('ALL');
+    setGiftSelectedCatId('ALL');
+    setGiftSelectedSubCatId('ALL');
     setFormGiftMode(rule.giftMode || 'FIXED_PRODUCT');
     setFormGiftProductIds(rule.giftProductIds || []);
     setFormOutOfStockPolicy(rule.outOfStockPolicy || 'AUTO_PAUSE');
     setFormDiscountValue(
-      rule.rewardType === 'PERCENTAGE_DISCOUNT'
+      effectiveRewardType === 'PERCENTAGE_DISCOUNT'
         ? rule.discountValue.toString()
         : (rule.discountValue / 1000).toFixed(3)
     );
@@ -236,6 +291,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     setFormStartsAt(rule.startsAt ? rule.startsAt.split('T')[0] : '');
     setFormEndsAt(rule.endsAt ? rule.endsAt.split('T')[0] : '');
     setFormIsActive(rule.isActive);
+    setGiftPickerSearch('');
     setErrors({});
     setIsModalOpen(true);
   };
@@ -251,6 +307,9 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     }
     if (formRewardType === 'FREE_GIFT' && formGiftProductIds.length === 0) {
       errs.giftProducts = 'يرجى اختيار منتج هدية واحد على الأقل.';
+    }
+    if ((formRewardType === 'FIXED_DISCOUNT' || formRewardType === 'PERCENTAGE_DISCOUNT') && formTargetScope === 'SPECIFIC_PRODUCTS' && formTargetProductIds.length === 0) {
+      errs.targetProducts = 'يرجى اختيار أو مسح باركود منتج واحد على الأقل لتطبيق الخصم عليه.';
     }
     if (formRewardType === 'FIXED_DISCOUNT') {
       const disc = parseFloat(formDiscountValue);
@@ -289,10 +348,13 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
       const res = await createOrUpdateRewardRuleAction({
         id: editingRule ? editingRule.id : undefined,
         title: formTitle.trim(),
+        channel: formChannel,
         rewardType: formRewardType,
+        targetScope: (formRewardType === 'FIXED_DISCOUNT' || formRewardType === 'PERCENTAGE_DISCOUNT') ? formTargetScope : 'ALL_PRODUCTS',
+        targetProductIds: (formRewardType === 'FIXED_DISCOUNT' || formRewardType === 'PERCENTAGE_DISCOUNT') && formTargetScope === 'SPECIFIC_PRODUCTS' ? formTargetProductIds : [],
         giftMode: formRewardType === 'FREE_GIFT' ? formGiftMode : undefined,
         giftProductIds: formRewardType === 'FREE_GIFT' ? formGiftProductIds : [],
-        outOfStockPolicy: formOutOfStockPolicy,
+        outOfStockPolicy: 'AUTO_PAUSE',
         discountValue: discountVal,
         maxDiscountFils,
         minSpendFils,
@@ -353,14 +415,65 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     }
   };
 
+  const handleToggleTargetProductId = (prodId: string) => {
+    setFormTargetProductIds(prev =>
+      prev.includes(prodId) ? prev.filter(id => id !== prodId) : [...prev, prodId]
+    );
+  };
+
+  // Categories & Subcategories Hierarchy
+  const rootCategories = useMemo(() => {
+    return (categories || []).filter(c => !c.parentId);
+  }, [categories]);
+
+  const subCategoriesMap = useMemo(() => {
+    const map: Record<string, SyncedCategory[]> = {};
+    (categories || []).forEach(c => {
+      if (c.parentId) {
+        if (!map[c.parentId]) map[c.parentId] = [];
+        map[c.parentId].push(c);
+      } else if (c.children && c.children.length > 0) {
+        map[c.id] = c.children;
+      }
+    });
+    return map;
+  }, [categories]);
+
+  const categoryProductsCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    availableProducts.forEach(p => {
+      if (p.categoryId) {
+        map[p.categoryId] = (map[p.categoryId] || 0) + 1;
+      }
+      if (p.categoryParentId) {
+        map[p.categoryParentId] = (map[p.categoryParentId] || 0) + 1;
+      }
+    });
+    return map;
+  }, [availableProducts]);
+
   // Filtered Rules
   const filteredRules = useMemo(() => {
     return data.rules.filter(r => {
       const matchSearch = r.title.toLowerCase().includes(rulesSearch.toLowerCase());
       const matchType = rulesTypeFilter === 'ALL' || r.rewardType === rulesTypeFilter;
-      return matchSearch && matchType;
+      
+      let matchCat = true;
+      if (rulesCategoryFilter !== 'ALL') {
+        const catTargetProductIds = new Set(
+          availableProducts
+            .filter(p => p.categoryId === rulesCategoryFilter || p.categoryParentId === rulesCategoryFilter || p.categorySlug === rulesCategoryFilter)
+            .map(p => p.id)
+        );
+        matchCat = (r.targetProductIds || []).some(id => catTargetProductIds.has(id)) ||
+                   (r.targetProductsInfo || []).some(info => catTargetProductIds.has(info.id)) ||
+                   (r.giftProductIds || []).some(id => catTargetProductIds.has(id)) ||
+                   (r.giftProductsInfo || []).some(info => catTargetProductIds.has(info.id));
+      }
+
+      return matchSearch && matchType && matchCat;
     });
-  }, [data.rules, rulesSearch, rulesTypeFilter]);
+  }, [data.rules, rulesSearch, rulesTypeFilter, rulesCategoryFilter, availableProducts]);
 
   // Filtered Redemptions
   const filteredRedemptions = useMemo(() => {
@@ -378,12 +491,266 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
     });
   }, [data.redemptions, redemptionsSearch, redemptionsRuleFilter, redemptionsTypeFilter, redemptionsStatusFilter]);
 
-  // Filtered Gift Products for picker
+  // Filtered Gift Products for picker (online only, barcode/variant search support)
   const filteredGiftProducts = useMemo(() => {
     const q = giftPickerSearch.trim().toLowerCase();
-    if (!q) return availableProducts;
-    return availableProducts.filter(p => p.nameAr.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
-  }, [availableProducts, giftPickerSearch]);
+    let onlineProducts = availableProducts.filter(p => p.channel !== 'POS');
+
+    // Category / Subcategory Filter
+    if (giftSelectedSubCatId !== 'ALL') {
+      onlineProducts = onlineProducts.filter(p => 
+        p.categoryId === giftSelectedSubCatId || 
+        p.categorySlug === giftSelectedSubCatId
+      );
+    } else if (giftSelectedCatId !== 'ALL') {
+      const childIds = new Set((subCategoriesMap[giftSelectedCatId] || []).map(ch => ch.id));
+      onlineProducts = onlineProducts.filter(p => 
+        p.categoryId === giftSelectedCatId || 
+        childIds.has(p.categoryId || '') || 
+        p.categoryParentId === giftSelectedCatId ||
+        p.categorySlug === giftSelectedCatId
+      );
+    }
+
+    if (!q) return onlineProducts;
+    return onlineProducts.filter(p => {
+      const matchName = p.nameAr.toLowerCase().includes(q);
+      const matchSku = p.sku.toLowerCase().includes(q);
+      const matchBarcode = p.barcode ? p.barcode.toLowerCase().includes(q) : false;
+      const matchVariants = p.barcodes ? p.barcodes.some(b => b.toLowerCase().includes(q)) : false;
+      return matchName || matchSku || matchBarcode || matchVariants;
+    });
+  }, [availableProducts, giftPickerSearch, giftSelectedCatId, giftSelectedSubCatId, subCategoriesMap]);
+
+  const handleBarcodeScanned = (scannedBarcode: string) => {
+    const code = scannedBarcode.trim().toLowerCase();
+    // Find matching online product
+    const matched = availableProducts.find(p => {
+      if (p.channel === 'POS') return false;
+      if (p.sku && p.sku.toLowerCase() === code) return true;
+      if (p.barcode && p.barcode.toLowerCase() === code) return true;
+      if (p.barcodes && p.barcodes.some(b => b.toLowerCase() === code)) return true;
+      return false;
+    });
+
+    if (matched) {
+      handleToggleGiftProductId(matched.id);
+      setGiftPickerSearch(matched.nameAr);
+    } else {
+      setGiftPickerSearch(scannedBarcode.trim());
+    }
+    setIsCameraScannerOpen(false);
+  };
+
+  // Filtered Products for Product-Specific Discounts (searches across available products according to rule channel)
+  const filteredDiscountProducts = useMemo(() => {
+    const q = discountProductSearch.trim().toLowerCase();
+    let prods = availableProducts;
+    if (formChannel === 'POS') {
+      prods = availableProducts.filter(p => p.channel !== 'ONLINE');
+    } else if (formChannel === 'ONLINE') {
+      prods = availableProducts.filter(p => p.channel !== 'POS');
+    }
+
+    // Category / Subcategory Filter
+    if (discountSelectedSubCatId !== 'ALL') {
+      prods = prods.filter(p => 
+        p.categoryId === discountSelectedSubCatId || 
+        p.categorySlug === discountSelectedSubCatId
+      );
+    } else if (discountSelectedCatId !== 'ALL') {
+      const childIds = new Set((subCategoriesMap[discountSelectedCatId] || []).map(ch => ch.id));
+      prods = prods.filter(p => 
+        p.categoryId === discountSelectedCatId || 
+        childIds.has(p.categoryId || '') || 
+        p.categoryParentId === discountSelectedCatId ||
+        p.categorySlug === discountSelectedCatId
+      );
+    }
+
+    if (!q) return prods.slice(0, 100);
+    return prods.filter(p => {
+      const matchName = p.nameAr.toLowerCase().includes(q);
+      const matchSku = p.sku.toLowerCase().includes(q);
+      const matchBarcode = p.barcode ? p.barcode.toLowerCase().includes(q) : false;
+      const matchVariants = p.barcodes ? p.barcodes.some(b => b.toLowerCase().includes(q)) : false;
+      return matchName || matchSku || matchBarcode || matchVariants;
+    }).slice(0, 200);
+  }, [availableProducts, discountProductSearch, formChannel, discountSelectedCatId, discountSelectedSubCatId, subCategoriesMap]);
+
+  const handleSelectAllFilteredDiscountProducts = () => {
+    const idsToAdd = filteredDiscountProducts.map(p => p.id);
+    setFormTargetProductIds(prev => Array.from(new Set([...prev, ...idsToAdd])));
+  };
+
+  const handleDeselectAllFilteredDiscountProducts = () => {
+    const idsToRemove = new Set(filteredDiscountProducts.map(p => p.id));
+    setFormTargetProductIds(prev => prev.filter(id => !idsToRemove.has(id)));
+  };
+
+  const handleSelectAllFilteredGiftProducts = () => {
+    const idsToAdd = filteredGiftProducts.map(p => p.id);
+    setFormGiftProductIds(prev => Array.from(new Set([...prev, ...idsToAdd])));
+  };
+
+  const handleDeselectAllFilteredGiftProducts = () => {
+    const idsToRemove = new Set(filteredGiftProducts.map(p => p.id));
+    setFormGiftProductIds(prev => prev.filter(id => !idsToRemove.has(id)));
+  };
+
+  // Reusable hierarchical Category and Subcategory filters component
+  const renderCategoryFilters = (
+    selectedCatId: string,
+    onSelectCat: (catId: string) => void,
+    selectedSubCatId: string,
+    onSelectSubCat: (subCatId: string) => void,
+    themeColor: 'pink' | 'amber' = 'pink'
+  ) => {
+    const activeCat = rootCategories.find(c => c.id === selectedCatId || c.slug === selectedCatId);
+    const activeSubCategories = activeCat ? (subCategoriesMap[activeCat.id] || []) : [];
+
+    return (
+      <div className="space-y-2 py-1.5 border-b border-zinc-100">
+        {/* Level 1: Root Categories Horizontal Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              onSelectCat('ALL');
+              onSelectSubCat('ALL');
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition cursor-pointer border shrink-0 ${
+              selectedCatId === 'ALL'
+                ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                : 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+            }`}
+          >
+            <span>كافة الأقسام والمجموعات</span>
+            <span className="ms-1.5 text-[10px] opacity-75">({availableProducts.length})</span>
+          </button>
+
+          {rootCategories.map((cat) => {
+            const isSelected = selectedCatId === cat.id || selectedCatId === cat.slug;
+            const count = categoryProductsCountMap[cat.id] || cat._count?.products || 0;
+            const children = subCategoriesMap[cat.id] || [];
+            const hasChildren = children.length > 0;
+
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => {
+                  onSelectCat(cat.id);
+                  onSelectSubCat('ALL');
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition cursor-pointer border shrink-0 flex items-center gap-1.5 ${
+                  isSelected
+                    ? themeColor === 'pink'
+                      ? 'bg-[#E6007E] text-white border-[#E6007E] shadow-2xs'
+                      : 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                    : 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                }`}
+              >
+                {cat.imagePath && cat.imagePath !== '/logo.png' && (
+                  <img src={cat.imagePath} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
+                )}
+                <span>{cat.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-zinc-100 text-zinc-500'}`}>
+                  {count}
+                </span>
+                {hasChildren && (
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded-md font-black ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-pink-100 text-[#E6007E]'
+                  }`}>
+                    {children.length} أقسام فرعية
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Level 2: Subcategories (تظهر كفلاتر للأقسام التي تحتوي أقساماً فرعية) */}
+        {activeCat && activeSubCategories.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 ps-2.5 pe-2.5 py-1.5 bg-gradient-to-l from-zinc-50 via-pink-50/40 to-zinc-50 rounded-xl border border-pink-200 text-xs animate-fade-in">
+            <span className="text-[11px] font-black text-zinc-700 shrink-0 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-[#E6007E]" />
+              <span>الأقسام الفرعية التابعة لـ ({activeCat.name}):</span>
+            </span>
+
+            <button
+              type="button"
+              onClick={() => onSelectSubCat('ALL')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer border shrink-0 ${
+                selectedSubCatId === 'ALL'
+                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                  : 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+              }`}
+            >
+              الكل في {activeCat.name}
+            </button>
+
+            {activeSubCategories.map((sub) => {
+              const isSubSelected = selectedSubCatId === sub.id || selectedSubCatId === sub.slug;
+              const subCount = categoryProductsCountMap[sub.id] || sub._count?.products || 0;
+
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => onSelectSubCat(sub.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer border shrink-0 flex items-center gap-1.5 ${
+                    isSubSelected
+                      ? themeColor === 'pink'
+                        ? 'bg-[#E6007E] text-white border-[#E6007E] shadow-2xs'
+                        : 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                      : 'bg-white hover:bg-pink-50 text-zinc-700 border-pink-200'
+                  }`}
+                >
+                  <span>{sub.name}</span>
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${isSubSelected ? 'bg-white/20' : 'bg-zinc-100 text-zinc-500'}`}>
+                    {subCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Selected Products for Target Discount
+  const selectedTargetProducts = useMemo(() => {
+    return availableProducts.filter(p => formTargetProductIds.includes(p.id));
+  }, [availableProducts, formTargetProductIds]);
+
+  const handleDiscountBarcodeScanned = (scannedBarcode: string) => {
+    const code = scannedBarcode.trim().toLowerCase();
+    const matched = availableProducts.find(p => {
+      if (p.sku && p.sku.toLowerCase() === code) return true;
+      if (p.barcode && p.barcode.toLowerCase() === code) return true;
+      if (p.barcodes && p.barcodes.some(b => b.toLowerCase() === code)) return true;
+      return false;
+    });
+
+    if (matched) {
+      if (!formTargetProductIds.includes(matched.id)) {
+        setFormTargetProductIds(prev => [...prev, matched.id]);
+        setDiscountScannerFeedback(`✓ تم إضافة المنتج: ${matched.nameAr}`);
+      } else {
+        setDiscountScannerFeedback(`! المنتج مضاف مسبقاً: ${matched.nameAr}`);
+      }
+      setTimeout(() => {
+        setIsDiscountCameraScannerOpen(false);
+        setDiscountScannerFeedback(null);
+      }, 1000);
+    } else {
+      setDiscountProductSearch(scannedBarcode.trim());
+      setDiscountScannerFeedback(`لم يتم العثور على منتج بالباركود: ${scannedBarcode}`);
+      setTimeout(() => setDiscountScannerFeedback(null), 3000);
+    }
+  };
 
   const formatJOD = (fils: number) => (fils / 1000).toFixed(3) + ' د.أ';
 
@@ -422,13 +789,6 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300" title={reason}>
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
             <span>استُنفد حد الاستخدام</span>
-          </span>
-        );
-      case 'GIFT_OUT_OF_STOCK':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-800 border border-red-200" title={reason}>
-            <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-            <span>نفد مخزون الهدية</span>
           </span>
         );
       default:
@@ -858,19 +1218,45 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <span className="text-xs font-bold text-zinc-500">نوع المكافأة:</span>
-              <select
-                value={rulesTypeFilter}
-                onChange={(e) => setRulesTypeFilter(e.target.value)}
-                className="border border-zinc-300 rounded-xl px-3 py-2 text-xs font-black text-zinc-800 bg-white outline-none focus:border-[#E6007E]"
-              >
-                <option value="ALL">كافة الأنواع</option>
-                <option value="FREE_GIFT">منتج هدية مجاني</option>
-                <option value="FREE_SHIPPING">توصيل مجاني</option>
-                <option value="FIXED_DISCOUNT">خصم نقدي مباشر</option>
-                <option value="PERCENTAGE_DISCOUNT">خصم نسبة مئوية %</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-zinc-500">القسم:</span>
+                <select
+                  value={rulesCategoryFilter}
+                  onChange={(e) => setRulesCategoryFilter(e.target.value)}
+                  className="border border-zinc-300 rounded-xl px-3 py-2 text-xs font-black text-zinc-800 bg-white outline-none focus:border-[#E6007E]"
+                >
+                  <option value="ALL">كافة الأقسام والمجموعات</option>
+                  {rootCategories.map(cat => {
+                    const children = subCategoriesMap[cat.id] || [];
+                    return (
+                      <React.Fragment key={cat.id}>
+                        <option value={cat.id}>📁 {cat.name} ({categoryProductsCountMap[cat.id] || 0})</option>
+                        {children.map(sub => (
+                          <option key={sub.id} value={sub.id}>
+                            &nbsp;&nbsp;&nbsp;↳ {sub.name} ({categoryProductsCountMap[sub.id] || 0})
+                          </option>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-zinc-500">نوع المكافأة:</span>
+                <select
+                  value={rulesTypeFilter}
+                  onChange={(e) => setRulesTypeFilter(e.target.value)}
+                  className="border border-zinc-300 rounded-xl px-3 py-2 text-xs font-black text-zinc-800 bg-white outline-none focus:border-[#E6007E]"
+                >
+                  <option value="ALL">كافة الأنواع</option>
+                  <option value="FREE_GIFT">منتج هدية مجاني</option>
+                  <option value="FREE_SHIPPING">توصيل مجاني</option>
+                  <option value="FIXED_DISCOUNT">خصم نقدي مباشر</option>
+                  <option value="PERCENTAGE_DISCOUNT">خصم نسبة مئوية %</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -897,7 +1283,15 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                         </span>
                         <div>
                           <h3 className="font-extrabold text-sm text-zinc-900 leading-snug">{rule.title}</h3>
-                          <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-semibold mt-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400 font-semibold mt-0.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              rule.channel === 'POS' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                              rule.channel === 'BOTH' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                              'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}>
+                              {rule.channel === 'POS' ? 'محل غزل (POS)' : rule.channel === 'BOTH' ? 'أونلاين + كاشير' : 'المتجر الإلكتروني'}
+                            </span>
+                            <span>•</span>
                             <span>الأولوية: #{rule.priority}</span>
                             <span>•</span>
                             <span>{rule.isStackable ? 'قابلة للدمج مع مكافآت أخرى' : 'غير قابلة للدمج (حصرية)'}</span>
@@ -917,13 +1311,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-zinc-500">
                         <span>طريقة احتساب الحد:</span>
-                        <span className="font-semibold text-zinc-700">
-                          {rule.spendCalculationBasis === 'ITEMS_BEFORE_DISCOUNT' ? 'قيمة المنتجات قبل أي خصم' : 'قيمة المنتجات بعد الخصم'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                        <span>احتساب التوصيل بالحد:</span>
-                        <span className="font-semibold text-zinc-700">{rule.includesShippingInThreshold ? 'نعم (محتسب)' : 'لا (المنتجات فقط)'}</span>
+                        <span className="font-semibold text-zinc-700">قيمة المنتجات بالسلة</span>
                       </div>
                     </div>
 
@@ -932,9 +1320,6 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                       <div className="border border-pink-200 bg-pink-50/40 rounded-2xl p-3 space-y-2">
                         <div className="flex items-center justify-between text-xs font-bold text-[#E6007E]">
                           <span>{rule.giftMode === 'CUSTOMER_CHOICE' ? 'هدايا تختار العميلة منها بالسلة:' : 'المنتج الهدية التلقائي:'}</span>
-                          <span className="text-[10px] text-zinc-500 font-normal">
-                            سياسة النفاد: {rule.outOfStockPolicy === 'AUTO_PAUSE' ? 'إيقاف تلقائي' : 'هدية بديلة'}
-                          </span>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {rule.giftProductsInfo.map((p) => (
@@ -944,6 +1329,31 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                                 <div className="font-bold text-zinc-900 truncate max-w-[140px]">{p.nameAr}</div>
                                 <div className="text-[10px] text-zinc-500 font-mono">
                                   سعر: {(p.price / 1000).toFixed(3)} د.أ | مخزون: {p.stock}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Specific Products Discount Preview */}
+                    {(rule.rewardType === 'FIXED_DISCOUNT' || rule.rewardType === 'PERCENTAGE_DISCOUNT') && rule.targetScope === 'SPECIFIC_PRODUCTS' && rule.targetProductsInfo && rule.targetProductsInfo.length > 0 && (
+                      <div className="border border-amber-200 bg-amber-50/40 rounded-2xl p-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-amber-800">
+                          <span className="flex items-center gap-1.5">
+                            <Tag className="w-3.5 h-3.5" />
+                            <span>منتجات محددة مشمولة بهذا الخصم ({rule.targetProductsInfo.length}):</span>
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {rule.targetProductsInfo.map((p) => (
+                            <div key={p.id} className="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-xl border border-amber-200 text-xs shadow-2xs">
+                              {p.imageUrl && <img src={p.imageUrl} alt={p.nameAr} className="w-6 h-6 object-contain rounded-md" />}
+                              <div>
+                                <div className="font-bold text-zinc-900 truncate max-w-[140px]">{p.nameAr}</div>
+                                <div className="text-[10px] text-zinc-500 font-mono">
+                                  سعر: {(p.price / 1000).toFixed(3)} د.أ {p.barcode ? `| ${p.barcode}` : ''}
                                 </div>
                               </div>
                             </div>
@@ -1214,21 +1624,61 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                 {errors.title && <p className="text-red-600 text-[11px] mt-1">{errors.title}</p>}
               </div>
 
-              {/* 2. Reward Type Selector */}
+              {/* 2. Channel Selector */}
               <div>
-                <label className="block mb-1.5 text-zinc-900 font-extrabold">نوع المكافأة الممنوحة للعميلة: *</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <label className="block mb-1.5 text-zinc-900 font-extrabold">قناة تطبيق المكافأة: *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {[
-                    { id: 'FREE_GIFT', label: 'منتج هدية مجاني', icon: '🎁', desc: 'مستحضر تجميل أو عناية' },
-                    { id: 'FREE_SHIPPING', label: 'توصيل مجاني', icon: '🚚', desc: 'إعفاء من رسوم الشحن' },
-                    { id: 'FIXED_DISCOUNT', label: 'خصم نقدي مباشر', icon: '💵', desc: 'مبلغ مالي ثابت (د.أ)' },
-                    { id: 'PERCENTAGE_DISCOUNT', label: 'خصم نسبة مئوية', icon: '🏷️', desc: 'نسبة خصم مئوية (%)' },
-                  ].map((t) => (
+                    { id: 'ONLINE', label: 'المتجر الإلكتروني', icon: '🌐', desc: 'طلبات الأونلاين والتطبيق' },
+                    { id: 'POS', label: 'محل غزل / الكاشير', icon: '🏪', desc: 'نقاط البيع في المعرض (POS)' },
+                    { id: 'BOTH', label: 'كلاهما (أونلاين وكاشير)', icon: '✨', desc: 'سارية بالمتجر والمعرض' },
+                  ].map((ch) => (
+                    <button
+                      key={ch.id}
+                      type="button"
+                      onClick={() => handleChannelChange(ch.id as 'ONLINE' | 'POS' | 'BOTH')}
+                      className={`p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                        formChannel === ch.id
+                          ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-2 ring-[#E6007E]/30'
+                          : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                      }`}
+                    >
+                      <span className="text-xl">{ch.icon}</span>
+                      <span className="font-extrabold text-xs">{ch.label}</span>
+                      <span className={`text-[10px] ${formChannel === ch.id ? 'text-zinc-300' : 'text-zinc-400'}`}>{ch.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Reward Type Selector */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-zinc-900 font-extrabold">نوع المكافأة الممنوحة للعميلة: *</label>
+                  {formChannel === 'POS' && (
+                    <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
+                      🔒 مقفلة على خصم النسبة المئوية % حصرياً لنقاط البيع والكاشير
+                    </span>
+                  )}
+                </div>
+                <div className={`grid gap-2.5 ${formChannel === 'POS' ? 'grid-cols-1 max-w-sm' : 'grid-cols-2 md:grid-cols-4'}`}>
+                  {(formChannel === 'POS'
+                    ? [{ id: 'PERCENTAGE_DISCOUNT', label: 'خصم نسبة مئوية', icon: '🏷️', desc: 'نسبة خصم مئوية (%) - حصرياً للكاشير' }]
+                    : [
+                        { id: 'FREE_GIFT', label: 'منتج هدية مجاني', icon: '🎁', desc: 'مستحضر تجميل أو عناية' },
+                        { id: 'FREE_SHIPPING', label: 'توصيل مجاني', icon: '🚚', desc: 'إعفاء من رسوم الشحن' },
+                        { id: 'FIXED_DISCOUNT', label: 'خصم نقدي مباشر', icon: '💵', desc: 'مبلغ مالي ثابت (د.أ)' },
+                        { id: 'PERCENTAGE_DISCOUNT', label: 'خصم نسبة مئوية', icon: '🏷️', desc: 'نسبة خصم مئوية (%)' },
+                      ]
+                  ).map((t) => (
                     <button
                       key={t.id}
                       type="button"
+                      disabled={formChannel === 'POS'}
                       onClick={() => setFormRewardType(t.id as RewardType)}
-                      className={`p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      className={`p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                        formChannel === 'POS' ? 'cursor-default' : 'cursor-pointer'
+                      } ${
                         formRewardType === t.id
                           ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-2 ring-[#E6007E]/30'
                           : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
@@ -1242,7 +1692,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                 </div>
               </div>
 
-              {/* 3. Dynamic Fields based on Type */}
+              {/* 4. Dynamic Fields based on Type */}
 
               {/* A. If FREE_GIFT */}
               {formRewardType === 'FREE_GIFT' && (
@@ -1280,37 +1730,81 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                     </div>
                   </div>
 
-                  {/* Out of Stock Policy */}
-                  <div>
-                    <label className="block mb-1 text-zinc-900 font-bold">سياسة نفاد مخزون الهدية:</label>
-                    <select
-                      value={formOutOfStockPolicy}
-                      onChange={(e) => setFormOutOfStockPolicy(e.target.value as OutOfStockPolicy)}
-                      className="w-full border border-pink-200 rounded-xl px-3 py-2 text-xs font-bold outline-none bg-white text-zinc-800"
-                    >
-                      <option value="AUTO_PAUSE">إيقاف القاعدة تلقائياً عند نفاد مخزون الهدية (حماية للتجربة)</option>
-                      <option value="FALLBACK_COSMETIC_GIFT">استبدال تلقائي بمنتج هدية بديل متاح من مستحضرات غزل</option>
-                    </select>
-                  </div>
-
-                  {/* Product Search & Picker for Gifts */}
+                  {/* Product Search & Picker for Gifts with Camera Barcode Scanner */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="block text-zinc-900 font-bold">
                         اختر المنتجات المؤهلة لتكون هدية ({formGiftProductIds.length} محددة):
                       </label>
-                      <span className="text-[10px] text-zinc-400">تصفح والبحث في كامل الكتالوج</span>
+                      <span className="text-[10px] text-zinc-400">منتجات الأونلاين المتاحة ({filteredGiftProducts.length})</span>
                     </div>
 
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-zinc-400 absolute start-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={giftPickerSearch}
-                        onChange={(e) => setGiftPickerSearch(e.target.value)}
-                        placeholder="ابحثي عن مستحضر التجميل أو الكود بالاسم..."
-                        className="w-full border border-pink-200 rounded-xl ps-8 pe-3 py-1.5 text-xs outline-none bg-white font-bold"
-                      />
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute start-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={giftPickerSearch}
+                          onChange={(e) => setGiftPickerSearch(e.target.value)}
+                          placeholder="ابحثي بالاسم، الكود SKU، أو امسحي الباركود..."
+                          className="w-full border border-pink-200 rounded-xl ps-8 pe-8 py-2 text-xs outline-none bg-white font-bold"
+                        />
+                        {giftPickerSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setGiftPickerSearch('')}
+                            className="absolute end-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCameraScannerOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-pink-100 hover:bg-[#E6007E] text-[#E6007E] hover:text-white border border-pink-200 rounded-xl text-xs font-black transition cursor-pointer shrink-0 shadow-xs"
+                        title="مسح باركود المنتج بواسطة كاميرا الهاتف أو الكمبيوتر"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span className="hidden sm:inline">مسح الباركود بالكاميرا</span>
+                      </button>
+                    </div>
+
+                    {/* Category & Subcategory Filter Bar */}
+                    {renderCategoryFilters(
+                      giftSelectedCatId,
+                      setGiftSelectedCatId,
+                      giftSelectedSubCatId,
+                      setGiftSelectedSubCatId,
+                      'pink'
+                    )}
+
+                    {/* Batch Actions for Gifts */}
+                    <div className="flex items-center justify-between text-xs pt-1 pb-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllFilteredGiftProducts}
+                          className="px-2.5 py-1 bg-pink-100 hover:bg-pink-200 text-[#E6007E] border border-pink-300 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title="تحديد وإضافة كافة المنتجات الظاهرة حالياً كهدايا مؤهلة"
+                        >
+                          <Check className="w-3.5 h-3.5 text-[#E6007E]" />
+                          <span>تحديد جميع المعروض ({filteredGiftProducts.length})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDeselectAllFilteredGiftProducts}
+                          className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 rounded-lg font-bold text-[11px] transition cursor-pointer"
+                        >
+                          إلغاء تحديد المعروض
+                        </button>
+                      </div>
+
+                      <span className="text-[11px] font-bold text-zinc-500 font-mono">
+                        معروض: {filteredGiftProducts.length} منتج
+                      </span>
                     </div>
 
                     <div className="max-h-48 overflow-y-auto space-y-1.5 border border-pink-200 bg-white rounded-2xl p-2">
@@ -1329,7 +1823,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                               <div>
                                 <span className="font-bold text-zinc-900 block text-xs">{p.nameAr}</span>
                                 <span className="text-[10px] text-zinc-400 font-mono">
-                                  {p.sku} | سعر: {(p.price / 1000).toFixed(3)} د.أ | تكلفة: {(p.costPrice ? (p.costPrice / 1000).toFixed(3) : '—')} د.أ
+                                  {p.sku} {p.barcode ? `| باركود: ${p.barcode}` : ''} | سعر: {(p.price / 1000).toFixed(3)} د.أ
                                 </span>
                               </div>
                             </div>
@@ -1339,7 +1833,7 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                                 p.stock > 10 ? 'bg-emerald-100 text-emerald-800' :
                                 p.stock > 0 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
                               }`}>
-                                {p.stock > 0 ? `متوفر (${p.stock})` : 'نفد المخزون'}
+                                {p.stock > 0 ? `متوفر (${p.stock})` : 'متاح للعرض'}
                               </span>
 
                               <div className={`w-4 h-4 rounded-md border flex items-center justify-center ${
@@ -1359,92 +1853,303 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
 
               {/* B. If FIXED_DISCOUNT or PERCENTAGE_DISCOUNT */}
               {(formRewardType === 'FIXED_DISCOUNT' || formRewardType === 'PERCENTAGE_DISCOUNT') && (
-                <div className="bg-amber-50/50 p-5 rounded-3xl border border-amber-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5 text-zinc-900 font-bold">
-                      {formRewardType === 'FIXED_DISCOUNT' ? 'قيمة الخصم النقدي (د.أ): *' : 'نسبة الخصم المئوية (%): *'}
-                    </label>
-                    <input
-                      type="number"
-                      step={formRewardType === 'FIXED_DISCOUNT' ? '0.25' : '1'}
-                      required
-                      value={formDiscountValue}
-                      onChange={(e) => setFormDiscountValue(e.target.value)}
-                      placeholder={formRewardType === 'FIXED_DISCOUNT' ? '5.000' : '15'}
-                      className={`w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white font-mono ${
-                        errors.discountValue ? 'border-red-400 bg-red-50/20' : 'border-zinc-300'
-                      }`}
-                    />
-                    {errors.discountValue && <p className="text-red-600 text-[11px] mt-1">{errors.discountValue}</p>}
-                  </div>
-
-                  {formRewardType === 'PERCENTAGE_DISCOUNT' && (
+                <div className="bg-amber-50/50 p-5 rounded-3xl border border-amber-200 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block mb-1.5 text-zinc-900 font-bold">الحد الأقصى للخصم (د.أ - اختياري):</label>
+                      <label className="block mb-1.5 text-zinc-900 font-bold">
+                        {formRewardType === 'FIXED_DISCOUNT' ? 'قيمة الخصم النقدي (د.أ): *' : 'نسبة الخصم المئوية (%): *'}
+                      </label>
                       <input
                         type="number"
-                        step="0.5"
-                        value={formMaxDiscount}
-                        onChange={(e) => setFormMaxDiscount(e.target.value)}
-                        placeholder="مثال: 10.000 (سقف الخصم)"
-                        className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white font-mono"
+                        step={formRewardType === 'FIXED_DISCOUNT' ? '0.25' : '1'}
+                        required
+                        value={formDiscountValue}
+                        onChange={(e) => setFormDiscountValue(e.target.value)}
+                        placeholder={formRewardType === 'FIXED_DISCOUNT' ? '5.000' : '15'}
+                        className={`w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white font-mono ${
+                          errors.discountValue ? 'border-red-400 bg-red-50/20' : 'border-zinc-300'
+                        }`}
                       />
-                      <span className="text-[10px] text-zinc-400 block mt-0.5">اتركيه فارغاً إذا لم ترغبي بوضع سقف</span>
+                      {errors.discountValue && <p className="text-red-600 text-[11px] mt-1">{errors.discountValue}</p>}
                     </div>
-                  )}
+
+                    {formRewardType === 'PERCENTAGE_DISCOUNT' && (
+                      <div>
+                        <label className="block mb-1.5 text-zinc-900 font-bold">الحد الأقصى للخصم (د.أ - اختياري):</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={formMaxDiscount}
+                          onChange={(e) => setFormMaxDiscount(e.target.value)}
+                          placeholder="مثال: 10.000 (سقف الخصم)"
+                          className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white font-mono"
+                        />
+                        <span className="text-[10px] text-zinc-400 block mt-0.5">اتركيه فارغاً إذا لم ترغبي بوضع سقف</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Target Scope Selection: Basket vs Specific Products */}
+                  <div className="pt-3 border-t border-amber-200/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-zinc-900 font-extrabold text-xs">
+                        نطاق تطبيق الخصم: *
+                      </label>
+                      <span className="text-[11px] text-amber-900 font-semibold">
+                        {formTargetScope === 'ALL_PRODUCTS' ? 'سارٍ على إجمالي السلة' : `مخصص لـ (${formTargetProductIds.length}) منتجات`}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setFormTargetScope('ALL_PRODUCTS')}
+                        className={`p-3 rounded-2xl border text-center transition flex items-center justify-center gap-2 cursor-pointer ${
+                          formTargetScope === 'ALL_PRODUCTS'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-400/30'
+                            : 'bg-white hover:bg-amber-100/50 text-zinc-700 border-amber-200'
+                        }`}
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                        <span className="font-extrabold text-xs">خصم عام على كامل السلة</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFormTargetScope('SPECIFIC_PRODUCTS')}
+                        className={`p-3 rounded-2xl border text-center transition flex items-center justify-center gap-2 cursor-pointer ${
+                          formTargetScope === 'SPECIFIC_PRODUCTS'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-400/30'
+                            : 'bg-white hover:bg-amber-100/50 text-zinc-700 border-amber-200'
+                        }`}
+                      >
+                        <Tag className="w-4 h-4" />
+                        <span className="font-extrabold text-xs">خصم على منتج معين أو عدة منتجات</span>
+                      </button>
+                    </div>
+
+                    {/* When SPECIFIC_PRODUCTS is selected */}
+                    {formTargetScope === 'SPECIFIC_PRODUCTS' && (
+                      <div className="bg-white rounded-2xl p-4 border border-amber-200 space-y-3 mt-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <span className="font-extrabold text-xs text-zinc-900 block">
+                              اختيار أو مسح باركود المنتجات المشمولة بالخصم:
+                            </span>
+                            <span className="text-[11px] text-zinc-500">
+                              امسحي باركود المنتج بالكاميرا أو ابحثي بالاسم لإضافته لقائمة الخصم (للمتجر أو الكاش)
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsDiscountCameraScannerOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E6007E] hover:bg-pink-700 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-xs shrink-0"
+                            title="مسح باركود المنتج بواسطة الكاميرا"
+                          >
+                            <Camera className="w-4 h-4" />
+                            <span>مسح الباركود بالكاميرا 📷</span>
+                          </button>
+                        </div>
+
+                        {/* Scanner feedback message */}
+                        {discountScannerFeedback && (
+                          <div className="p-2.5 rounded-xl bg-pink-50 border border-pink-200 text-[#E6007E] text-xs font-bold flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4" />
+                            <span>{discountScannerFeedback}</span>
+                          </div>
+                        )}
+
+                        {/* Search Input */}
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute start-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={discountProductSearch}
+                            onChange={(e) => setDiscountProductSearch(e.target.value)}
+                            placeholder="ابحثي باسم المنتج، الباركود، أو الرمز (SKU)..."
+                            className="w-full border border-zinc-200 rounded-xl ps-8 pe-8 py-2 text-xs outline-none bg-zinc-50/50 font-bold focus:border-[#E6007E]"
+                          />
+                          {discountProductSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setDiscountProductSearch('')}
+                              className="absolute end-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Selected Products Preview Chips */}
+                        {selectedTargetProducts.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-extrabold text-emerald-700">
+                              ✓ المنتجات المحددة حالياً للخصم ({selectedTargetProducts.length}):
+                            </span>
+                            <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-1.5 border border-emerald-100 rounded-xl bg-emerald-50/20">
+                              {selectedTargetProducts.map(p => {
+                                const originalFils = p.price;
+                                let discountedFils = originalFils;
+                                if (formRewardType === 'PERCENTAGE_DISCOUNT') {
+                                  const pct = parseFloat(formDiscountValue) || 0;
+                                  discountedFils = Math.max(0, originalFils - Math.round(originalFils * (pct / 100)));
+                                } else {
+                                  const fix = Math.round((parseFloat(formDiscountValue) || 0) * 1000);
+                                  discountedFils = Math.max(0, originalFils - fix);
+                                }
+
+                                return (
+                                  <div
+                                    key={p.id}
+                                    className="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-xl border border-emerald-200 text-xs shadow-2xs"
+                                  >
+                                    <img src={p.imageUrl || '/product-placeholder.png'} alt={p.nameAr} className="w-7 h-7 object-contain rounded-lg border border-zinc-100 bg-white" />
+                                    <div>
+                                      <span className="font-extrabold text-zinc-900 block max-w-[160px] truncate">{p.nameAr}</span>
+                                      <span className="text-[10px] text-zinc-500 font-mono">
+                                        <span className="line-through text-zinc-400">{(originalFils / 1000).toFixed(3)}</span>
+                                        {' → '}
+                                        <span className="text-emerald-700 font-bold">{(discountedFils / 1000).toFixed(3)} د.أ</span>
+                                        {p.barcode ? ` | ${p.barcode}` : ''}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleTargetProductId(p.id)}
+                                      className="p-1 text-zinc-400 hover:text-red-600 rounded-lg transition cursor-pointer"
+                                      title="إزالة من قائمة الخصم"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Category & Subcategory Filter Bar */}
+                        {renderCategoryFilters(
+                          discountSelectedCatId,
+                          setDiscountSelectedCatId,
+                          discountSelectedSubCatId,
+                          setDiscountSelectedSubCatId,
+                          'amber'
+                        )}
+
+                        {/* Quick Batch Selection Buttons */}
+                        <div className="flex items-center justify-between text-xs pt-1 pb-1">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSelectAllFilteredDiscountProducts}
+                              className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px] transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title="تحديد وإضافة كافة المنتجات الظاهرة في هذا القسم للخصم"
+                            >
+                              <Check className="w-3.5 h-3.5 text-amber-700" />
+                              <span>تحديد جميع المعروض ({filteredDiscountProducts.length})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleDeselectAllFilteredDiscountProducts}
+                              className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 rounded-lg font-bold text-[11px] transition cursor-pointer"
+                              title="إلغاء تحديد كافة المنتجات الظاهرة حالياً"
+                            >
+                              إلغاء تحديد المعروض
+                            </button>
+                          </div>
+                          
+                          <span className="text-[11px] font-bold text-zinc-500 font-mono">
+                            معروض: {filteredDiscountProducts.length} منتج
+                          </span>
+                        </div>
+
+                        {/* Available Products Scrollable List */}
+                        <div className="max-h-52 overflow-y-auto space-y-1.5 border border-zinc-200 rounded-2xl p-2 bg-zinc-50/30">
+                          {filteredDiscountProducts.map((p) => {
+                            const isSelected = formTargetProductIds.includes(p.id);
+                            return (
+                              <div
+                                key={p.id}
+                                onClick={() => handleToggleTargetProductId(p.id)}
+                                className={`flex items-center justify-between p-2 rounded-xl transition cursor-pointer border ${
+                                  isSelected ? 'bg-amber-50/80 border-amber-500 shadow-2xs' : 'hover:bg-white border-zinc-100 bg-white/60'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <img src={p.imageUrl || '/product-placeholder.png'} alt={p.nameAr} className="w-8 h-8 object-contain rounded-lg border border-zinc-200 bg-white" />
+                                  <div>
+                                    <span className="font-bold text-zinc-900 block text-xs">{p.nameAr}</span>
+                                    <span className="text-[10px] text-zinc-500 font-mono">
+                                      {p.sku} {p.barcode ? `| باركود: ${p.barcode}` : ''} | سعر: {(p.price / 1000).toFixed(3)} د.أ
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                                    p.channel === 'POS' ? 'bg-amber-100 text-amber-800' :
+                                    p.channel === 'ONLINE' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-purple-100 text-purple-800'
+                                  }`}>
+                                    {p.channel === 'POS' ? 'كاشير' : p.channel === 'ONLINE' ? 'أونلاين' : 'مشترك'}
+                                  </span>
+
+                                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center ${
+                                    isSelected ? 'bg-amber-600 border-amber-600 text-white' : 'border-zinc-300'
+                                  }`}>
+                                    {isSelected && <Check className="w-3 h-3" />}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {filteredDiscountProducts.length === 0 && (
+                            <div className="p-6 text-center text-zinc-400 text-xs">
+                              لم يتم العثور على أي منتج يطابق عبارة البحث "{discountProductSearch}"
+                            </div>
+                          )}
+                        </div>
+                        {errors.targetProducts && <p className="text-red-600 text-[11px]">{errors.targetProducts}</p>}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {/* 4. Minimum Spend Threshold & Calculation Basis */}
-              <div className="bg-zinc-50 p-5 rounded-3xl border border-zinc-200 space-y-4">
-                <h4 className="font-black text-sm text-zinc-900">الحد الأدنى وطريقة احتساب قيمة السلة:</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5 text-zinc-900 font-bold">الحد الأدنى لقيمة السلة (د.أ): *</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      required
-                      value={formMinSpend}
-                      onChange={(e) => setFormMinSpend(e.target.value)}
-                      placeholder="مثال: 35.000"
-                      className={`w-full border rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white font-mono ${
-                        errors.minSpend ? 'border-red-400 bg-red-50/20' : 'border-zinc-300'
-                      }`}
-                    />
-                    {errors.minSpend && <p className="text-red-600 text-[11px] mt-1">{errors.minSpend}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5 text-zinc-900 font-bold">طريقة احتساب الحد الأدنى بالسلة:</label>
-                    <select
-                      value={formSpendBasis}
-                      onChange={(e) => setFormSpendBasis(e.target.value as SpendCalculationBasis)}
-                      className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-xs font-bold outline-none bg-white text-zinc-800"
-                    >
-                      <option value="ITEMS_BEFORE_DISCOUNT">قيمة المنتجات قبل أي خصم أو كوبون إضافي</option>
-                      <option value="ITEMS_AFTER_DISCOUNT">قيمة المنتجات بعد تطبيق كوبونات الخصم</option>
-                    </select>
-                  </div>
+              {/* 5. Minimum Spend Threshold (Simplified directly to cart products value) */}
+              <div className="bg-zinc-50 p-5 rounded-3xl border border-zinc-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-sm text-zinc-900">الحد الأدنى لقيمة السلة:</h4>
+                  <span className="text-xs font-bold text-zinc-500 bg-white px-2.5 py-1 rounded-xl border border-zinc-200">
+                    طريقة الاحتساب: قيمة المنتجات بالسلة
+                  </span>
                 </div>
-
-                <div className="pt-2 border-t border-zinc-200/80">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formIncludesShipping}
-                      onChange={(e) => setFormIncludesShipping(e.target.checked)}
-                      className="rounded text-[#E6007E] focus:ring-[#E6007E] w-4 h-4 cursor-pointer"
-                    />
-                    <span className="text-xs font-bold text-zinc-800">
-                      احتساب كلفة التوصيل ضمن الحد الأدنى المطلوب؟ (الموصى به: غير محتسب - احتساب قيمة المنتجات فقط)
-                    </span>
-                  </label>
+                <div>
+                  <label className="block mb-1.5 text-zinc-900 font-bold">قيمة منتجات السلة المطلوبة (د.أ): *</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    required
+                    value={formMinSpend}
+                    onChange={(e) => setFormMinSpend(e.target.value)}
+                    placeholder="مثال: 35.000"
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm font-bold outline-none bg-white font-mono ${
+                      errors.minSpend ? 'border-red-400 bg-red-50/20' : 'border-zinc-300'
+                    }`}
+                  />
+                  {errors.minSpend && <p className="text-red-600 text-[11px] mt-1">{errors.minSpend}</p>}
+                  <p className="text-[11px] text-zinc-500 font-medium mt-1">
+                    يتم احتساب التأهيل تلقائياً فور وصول مجموع منتجات السلة إلى هذا المبلغ أو تجاوزه.
+                  </p>
                 </div>
               </div>
 
-              {/* 5. Stacking, Priority & Usage Limits */}
+              {/* 6. Stacking, Priority & Usage Limits */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block mb-1.5 text-zinc-900 font-bold">هل يمكن دمجها مع مكافآت أخرى؟</label>
@@ -1528,8 +2233,10 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-1">
                   <div className="bg-white p-2.5 rounded-xl border border-pink-100">
-                    <span className="text-[10px] text-zinc-400 block font-bold">الحد الأدنى:</span>
-                    <span className="font-black text-zinc-900 font-mono">{formMinSpend || '0.000'} د.أ</span>
+                    <span className="text-[10px] text-zinc-400 block font-bold">القناة والحد:</span>
+                    <span className="font-black text-zinc-900 font-mono">
+                      {formChannel === 'POS' ? 'كاشير (POS)' : formChannel === 'BOTH' ? 'أونلاين + كاشير' : 'المتجر الإلكتروني'} | {formMinSpend || '0.000'} د.أ
+                    </span>
                   </div>
                   <div className="bg-white p-2.5 rounded-xl border border-pink-100">
                     <span className="text-[10px] text-zinc-400 block font-bold">نوع المكافأة:</span>
@@ -1576,6 +2283,22 @@ export default function AdminRewardsClient({ initialTabParam, initialData, avail
           </div>
         </div>
       )}
+
+      {/* Camera Barcode Scanner Modal for Gift Selection */}
+      <CameraBarcodeScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        onScan={handleBarcodeScanned}
+        title="مسح باركود منتج الهدية بالكاميرا"
+      />
+
+      {/* Camera Barcode Scanner Modal for Product Discounts */}
+      <CameraBarcodeScannerModal
+        isOpen={isDiscountCameraScannerOpen}
+        onClose={() => setIsDiscountCameraScannerOpen(false)}
+        onScan={handleDiscountBarcodeScanned}
+        title="مسح باركود المنتج بالكاميرا لإضافة الخصم (للمتجر أو الكاش)"
+      />
 
       {/* ==================================================================== */}
       {/* MODAL: ORDER DETAILS QUICK VIEW                                      */}
