@@ -187,10 +187,7 @@ export default async function ShopPage({
     families = dbFamilies;
     dbSuccess = true;
   } catch (error) {
-    console.warn('Database query failed or is offline in ShopPage, using curated beauty catalog fallback.');
-    try {
-      customBadges = await getProductCustomBadges();
-    } catch {}
+    console.error('[ShopPage] Database query failed:', error instanceof Error ? error.message : error);
     dbSuccess = false;
   }
 

@@ -45,6 +45,8 @@ function createPrismaClient(): PrismaClient {
       const adapter = new PrismaPg({
         connectionString: env.HYPERDRIVE.connectionString,
         maxUses: 1,
+        connectionTimeoutMillis: 5000,
+        idleTimeoutMillis: 1000,
       });
 
       return new PrismaClient({
@@ -65,6 +67,8 @@ function createPrismaClient(): PrismaClient {
       const adapter = new PrismaPg({
         connectionString: envConn,
         maxUses: 1,
+        connectionTimeoutMillis: 5000,
+        idleTimeoutMillis: 1000,
       });
       return new PrismaClient({
         adapter,
