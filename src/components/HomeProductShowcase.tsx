@@ -111,6 +111,7 @@ export function HomeProductShowcase({
 
             <Link
               href={viewAllHref}
+              prefetch={false}
               className="text-xs font-bold text-[#E6007E] hover:underline flex items-center gap-1 shrink-0"
             >
               <span>{viewAllLabel || (isAr ? 'عرض الكل' : 'View All')}</span>
@@ -157,6 +158,7 @@ export function HomeProductShowcase({
 
                 <Link
                   href={viewAllHref}
+                  prefetch={false}
                   className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 font-bold rounded-xl text-xs transition-all text-center"
                 >
                   {isAr ? 'تصفح جميع المنتجات في المتجر ←' : 'Browse All Products →'}
@@ -240,7 +242,7 @@ function ProductCardItem({
 
       {/* Product Visual Container */}
       <div>
-        <Link href={`/${locale}/products/${prod.slug}`} className="block">
+        <Link href={`/${locale}/products/${prod.slug}`} prefetch={false} className="block">
           <div className="aspect-square bg-zinc-100 rounded-xl mb-2.5 sm:mb-3 relative overflow-hidden group-hover:scale-102 transition-transform">
             <Image
               src={prod.imageUrl || '/logo.png'}
@@ -274,7 +276,7 @@ function ProductCardItem({
         </span>
 
         {/* Title */}
-        <Link href={`/${locale}/products/${prod.slug}`}>
+        <Link href={`/${locale}/products/${prod.slug}`} prefetch={false}>
           <h3 className="text-xs sm:text-sm font-bold text-zinc-900 line-clamp-2 hover:text-[#E6007E] transition-colors mb-1.5 leading-snug">
             {isAr ? prod.nameAr : (prod.nameEn || prod.nameAr)}
           </h3>
@@ -314,6 +316,7 @@ function ProductCardItem({
 
         <Link
           href={`/${locale}/products/${prod.slug}`}
+          prefetch={false}
           className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#E6007E] hover:bg-[#C5006C] text-white flex items-center justify-center transition-colors shadow-xs active:scale-95 shrink-0"
           title={isAr ? 'عرض المنتج' : 'View Product'}
         >

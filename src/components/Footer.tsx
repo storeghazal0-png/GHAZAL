@@ -110,11 +110,11 @@ export async function Footer({ locale = 'ar' }: { locale?: string }) {
               {isAr ? 'تسوقي حسب القسم' : 'Shop by Category'}
             </h4>
             <ul className="space-y-2.5 text-sm text-zinc-300">
-              <li><Link href={`/${locale}/shop?category=makeup`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'المكياج ومستحضرات التجميل' : 'Makeup'}</Link></li>
-              <li><Link href={`/${locale}/shop?category=skincare`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'العناية بالبشرة' : 'Skincare'}</Link></li>
-              <li><Link href={`/${locale}/shop?category=haircare`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'العناية بالشعر' : 'Haircare'}</Link></li>
-              <li><Link href={`/${locale}/shop?category=perfumes`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'العطور الفاخرة' : 'Fragrances'}</Link></li>
-              <li><Link href={`/${locale}/shop?category=accessories`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'الإكسسوارات والهدايا' : 'Accessories & Gifts'}</Link></li>
+              <li><Link href={`/${locale}/shop?category=makeup`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'المكياج ومستحضرات التجميل' : 'Makeup'}</Link></li>
+              <li><Link href={`/${locale}/shop?category=skincare`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'العناية بالبشرة' : 'Skincare'}</Link></li>
+              <li><Link href={`/${locale}/shop?category=haircare`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'العناية بالشعر' : 'Haircare'}</Link></li>
+              <li><Link href={`/${locale}/shop?category=perfumes`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'العطور الفاخرة' : 'Fragrances'}</Link></li>
+              <li><Link href={`/${locale}/shop?category=accessories`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'الإكسسوارات والهدايا' : 'Accessories & Gifts'}</Link></li>
             </ul>
           </div>
 
@@ -124,10 +124,10 @@ export async function Footer({ locale = 'ar' }: { locale?: string }) {
               {isAr ? 'خدمة العملاء' : 'Customer Service'}
             </h4>
             <ul className="space-y-2.5 text-sm text-zinc-300">
-              <li><Link href={`/${locale}/shipping`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'معلومات التوصيل والشحن' : 'Shipping Info'}</Link></li>
-              <li><Link href={`/${locale}/returns`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'سياسة الاستبدال والاسترجاع' : 'Return Policy'}</Link></li>
-              <li><Link href={`/${locale}/faq`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'الأسئلة الشائعة' : 'FAQ'}</Link></li>
-              <li><Link href={`/${locale}/contact`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'تواصل معنا' : 'Contact Us'}</Link></li>
+              <li><Link href={`/${locale}/shipping`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'معلومات التوصيل والشحن' : 'Shipping Info'}</Link></li>
+              <li><Link href={`/${locale}/returns`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'سياسة الاستبدال والاسترجاع' : 'Return Policy'}</Link></li>
+              <li><Link href={`/${locale}/faq`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'الأسئلة الشائعة' : 'FAQ'}</Link></li>
+              <li><Link href={`/${locale}/contact`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'تواصل معنا' : 'Contact Us'}</Link></li>
             </ul>
           </div>
 
@@ -137,9 +137,9 @@ export async function Footer({ locale = 'ar' }: { locale?: string }) {
               {isAr ? 'عن غزل' : 'About Ghazal'}
             </h4>
             <ul className="space-y-2.5 text-sm text-zinc-300">
-              <li><Link href={`/${locale}/about`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'عن غزل' : 'About Ghazal'}</Link></li>
-              <li><Link href={`/${locale}/privacy`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'سياسة الخصوصية' : 'Privacy Policy'}</Link></li>
-              <li><Link href={`/${locale}/terms`} className="hover:text-[#E6007E] transition-colors">{isAr ? 'الشروط والأحكام' : 'Terms of Service'}</Link></li>
+              <li><Link href={`/${locale}/about`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'عن غزل' : 'About Ghazal'}</Link></li>
+              <li><Link href={`/${locale}/privacy`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'سياسة الخصوصية' : 'Privacy Policy'}</Link></li>
+              <li><Link href={`/${locale}/terms`} prefetch={false} className="hover:text-[#E6007E] transition-colors">{isAr ? 'الشروط والأحكام' : 'Terms of Service'}</Link></li>
             </ul>
           </div>
         </div>

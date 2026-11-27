@@ -112,7 +112,7 @@ export function PaginatedProductGrid({
 
               {/* Product Visual Container */}
               <div>
-                <Link href={`/${locale}/products/${product.slug}`} className="block">
+                <Link href={`/${locale}/products/${product.slug}`} prefetch={false} className="block">
                   <div className="aspect-square bg-zinc-100 rounded-xl mb-2 sm:mb-3 relative overflow-hidden group-hover:scale-102 transition-transform">
                     <Image
                       src={imgUrl}
@@ -147,7 +147,7 @@ export function PaginatedProductGrid({
                 </div>
 
                 {/* Title */}
-                <Link href={`/${locale}/products/${product.slug}`}>
+                <Link href={`/${locale}/products/${product.slug}`} prefetch={false}>
                   <h3 className="text-xs sm:text-sm font-bold text-zinc-900 line-clamp-2 hover:text-[#E6007E] transition-colors mb-2 leading-snug">
                     {isAr ? product.nameAr : (product.nameEn || product.nameAr)}
                   </h3>
@@ -181,6 +181,7 @@ export function PaginatedProductGrid({
                 {/* زر عرض فقط */}
                 <Link
                   href={`/${locale}/products/${product.slug}`}
+                  prefetch={false}
                   className="px-2.5 py-1.5 rounded-lg bg-[#E6007E] hover:bg-[#C5006C] text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs active:scale-95 shrink-0"
                 >
                   <Eye className="w-3.5 h-3.5" />

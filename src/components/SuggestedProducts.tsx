@@ -97,6 +97,7 @@ export default function SuggestedProducts({ products, locale }: SuggestedProduct
             <Link
               key={product.id}
               href={`/${locale}/products/${product.slug}`}
+              prefetch={false}
               className="group shrink-0 w-36 sm:w-44 md:w-48 bg-white rounded-xl border border-zinc-200/90 overflow-hidden hover:shadow-md hover:border-[#E6007E]/50 transition-all duration-200 snap-start flex flex-col justify-between"
             >
               {/* Image filling square */}

@@ -43,7 +43,7 @@ export function MobileCategoriesFeed({ categories, locale, isAr }: { categories:
               <h3 className="text-2xl font-bold font-heading text-[var(--color-charcoal-900)]">
                 {category.name}
               </h3>
-              <Link href={`/${locale}/shop?category=${category.id}`} className="text-xs font-bold text-[var(--color-champagne-600)] hover:underline">
+              <Link href={`/${locale}/shop?category=${category.id}`} prefetch={false} className="text-xs font-bold text-[var(--color-champagne-600)] hover:underline">
                 {isAr ? 'عرض الكل' : 'View All'}
               </Link>
             </div>
@@ -61,6 +61,7 @@ export function MobileCategoriesFeed({ categories, locale, isAr }: { categories:
                 return (
                   <Link 
                     href={`/${locale}/products/${product.slug}`} 
+                    prefetch={false}
                     key={product.id}
                     className={`group bg-white rounded-lg shadow-sm border border-[var(--color-ivory-200)] flex flex-col snap-start shrink-0 ${isExpanded ? 'w-full h-full' : 'w-48'} hover:border-[var(--color-champagne-600)] transition-all overflow-hidden`}
                   >
