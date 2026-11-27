@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/dal';
 import { logout } from '@/actions/auth';
 import { AdminAutoRefresher } from '@/components/AdminAutoRefresher';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminLayout({
   children
 }: {

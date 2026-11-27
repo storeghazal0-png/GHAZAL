@@ -44,11 +44,12 @@ export function POSOrdersPanel({
     });
   }, []);
 
-  // Supabase client for realtime
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
+  // Supabase client for realtime (safe build-time fallback)
+  const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ebygsibxdxjxaetrqrya.supabase.co';
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_sGe982LRaxveX8O67APzgQ_ojL_YMev';
+    return createBrowserClient(url, key);
+  }, []);
 
   const fetchOrders = async () => {
     setLoading(true);

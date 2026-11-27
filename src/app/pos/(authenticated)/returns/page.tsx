@@ -2,6 +2,8 @@ import React from 'react';
 import { requirePermission } from '@/lib/dal';
 import { ReturnsClient } from './ReturnsClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function POSReturnsPage() {
   await requirePermission('pos:access');
 

@@ -4,6 +4,8 @@ import { POSOrdersPanel } from '@/components/POSOrdersPanel';
 import Link from 'next/link';
 import { ShoppingBag, Truck, Layers, ArrowRight } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function POSOrdersPage() {
   const session = await requirePOSAuth();
   const activePermissions = await getEmployeePermissions(session.employeeId);

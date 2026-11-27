@@ -5,6 +5,8 @@ import { POSCashierWorkspace } from '@/components/POSCashierWorkspace';
 import { getLivePOSCatalog } from '@/actions/pos';
 import { getPrintingSettings } from '@/actions/admin-pos';
 
+export const dynamic = 'force-dynamic';
+
 export default async function POSCashierPage() {
   // 1. Authorize permission
   const session = await requirePermission('pos:access');

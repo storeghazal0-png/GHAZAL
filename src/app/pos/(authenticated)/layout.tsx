@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { logout } from '@/actions/auth';
 import { ShoppingBag, ArrowDownLeft, DollarSign, BarChart3, Layers, Truck, LogOut, Shield } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Layout({
   children,
 }: {

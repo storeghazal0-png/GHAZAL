@@ -6,6 +6,8 @@ import { getShippingZonesList } from '@/actions/shipping';
 import Link from 'next/link';
 import { Truck, ShoppingBag, Layers, ArrowRight } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function POSDeliveriesPage({
   searchParams
 }: {
