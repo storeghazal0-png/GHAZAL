@@ -26,8 +26,7 @@ interface Params {
   locale?: string;
 }
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = 300;
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { locale = 'ar' } = await params;

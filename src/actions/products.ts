@@ -9,6 +9,8 @@ import { getSynchronizedCategories } from '@/actions/categories';
 
 // In-memory fallback and quick lookup cache for product custom badges
 const inMemoryProductBadges: Record<string, string> = {};
+let badgesCachedResult: Record<string, string> | null = null;
+let badgesExpiresAt = 0;
 
 type ProductVariantType = 'SHADE' | 'SCENT' | 'SIZE' | 'NONE';
 
@@ -18,20 +20,32 @@ function normalizeVariantType(value: FormDataEntryValue | null): ProductVariantT
 }
 
 export async function getProductCustomBadges(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (badgesCachedResult && badgesExpiresAt > now) {
+    return badgesCachedResult;
+  }
+
   try {
     const setting = await prisma.siteSettings.findUnique({
       where: { key: 'product_custom_badges' }
     });
     if (setting?.value) {
       const parsed = JSON.parse(setting.value);
-      return { ...inMemoryProductBadges, ...parsed };
+      const res = { ...inMemoryProductBadges, ...parsed };
+      badgesCachedResult = res;
+      badgesExpiresAt = now + 60_000;
+      return res;
     }
   } catch {}
+  badgesCachedResult = inMemoryProductBadges;
+  badgesExpiresAt = now + 15_000;
   return inMemoryProductBadges;
 }
 
 export async function setProductCustomBadge(productIdOrSlug: string, badge: string | null) {
   await requirePermission('manage:products');
+  badgesCachedResult = null;
+  badgesExpiresAt = 0;
   const cleanBadge = badge?.trim() || '';
   if (cleanBadge) {
     inMemoryProductBadges[productIdOrSlug] = cleanBadge;

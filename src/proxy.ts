@@ -5,6 +5,7 @@ import { updateSession } from './utils/supabase/middleware';
 const SESSION_COOKIE_NAME = 'ghazal_session';
 
 export default async function proxy(request: NextRequest) {
+  const startMs = Date.now();
   try {
     // Update Supabase session and get the base response with potentially refreshed cookies
     const supabaseResponse = await updateSession(request);
@@ -89,6 +90,7 @@ export default async function proxy(request: NextRequest) {
     finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
     finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     finalResponse.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+    finalResponse.headers.set('Server-Timing', `proxy;dur=${Date.now() - startMs}`);
 
     return finalResponse;
   } catch (err) {

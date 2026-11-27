@@ -8,11 +8,42 @@ import type { Metadata } from 'next';
 import { Sparkles, ShoppingBag, ArrowLeft, Tag } from 'lucide-react';
 import { getActivePromotions, computeProductPromotionPricing, findActivePromotionForProduct } from '@/lib/promotions';
 import { getProductCustomBadges } from '@/actions/products';
+import { getSynchronizedCategories } from '@/actions/categories';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = 60;
 
 const BASE_URL = 'https://ghazal.jo';
+
+// In-memory cache for static lookup metadata (genders, fragrance families)
+let cachedGenders: any[] | null = null;
+let gendersExpiresAt = 0;
+async function getCachedGenders() {
+  const now = Date.now();
+  if (cachedGenders && gendersExpiresAt > now) return cachedGenders;
+  try {
+    const list = await prisma.gender.findMany({ orderBy: { name: 'asc' } });
+    cachedGenders = list;
+    gendersExpiresAt = now + 300_000;
+    return list;
+  } catch {
+    return cachedGenders || [];
+  }
+}
+
+let cachedFamilies: any[] | null = null;
+let familiesExpiresAt = 0;
+async function getCachedFragranceFamilies() {
+  const now = Date.now();
+  if (cachedFamilies && familiesExpiresAt > now) return cachedFamilies;
+  try {
+    const list = await prisma.fragranceFamily.findMany({ orderBy: { name: 'asc' } });
+    cachedFamilies = list;
+    familiesExpiresAt = now + 300_000;
+    return list;
+  } catch {
+    return cachedFamilies || [];
+  }
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
@@ -122,39 +153,51 @@ export default async function ShopPage({
       ];
     }
 
-    const [dbProducts, dbTotal, dbCats, dbGenders, dbFamilies, fetchedBadges] = await Promise.all([
+    const [dbProducts, dbTotal, allSyncedCats, dbGenders, dbFamilies, fetchedBadges] = await Promise.all([
       prisma.product.findMany({
         where,
         take: 40,
         skip: 0,
-        include: {
-          variants: { orderBy: { size: 'asc' } },
-          images: { orderBy: { order: 'asc' } },
-          category: true,
-          brand: true,
+        select: {
+          id: true,
+          slug: true,
+          nameAr: true,
+          nameEn: true,
+          shortDescription: true,
+          rating: true,
+          reviewsCount: true,
+          reviewReasons: true,
+          category: { select: { id: true, name: true, slug: true } },
+          brand: { select: { id: true, name: true, nameAr: true } },
+          variants: {
+            where: { isActive: true },
+            orderBy: { price: 'asc' },
+            select: {
+              id: true,
+              size: true,
+              shade: true,
+              colorHex: true,
+              price: true,
+              compareAt: true,
+              isActive: true,
+            }
+          },
+          images: {
+            orderBy: { order: 'asc' },
+            select: { id: true, url: true, isMain: true, order: true }
+          },
         },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.product.count({ where }),
-      prisma.category.findMany({ 
-        where: { 
-          isActive: true,
-          parentId: null
-        },
-        include: {
-          children: {
-            where: {
-              isActive: true,
-            },
-            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          },
-        },
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] 
-      }),
-      prisma.gender.findMany({ orderBy: { name: 'asc' } }),
-      prisma.fragranceFamily.findMany({ orderBy: { name: 'asc' } }),
+      getSynchronizedCategories(),
+      getCachedGenders(),
+      getCachedFragranceFamilies(),
       getProductCustomBadges(),
     ]);
+
+    // Filter to active root categories for the filter sidebar
+    const dbCats = allSyncedCats.filter(c => !c.parentId && c.isActive !== false);
 
     customBadges = fetchedBadges || {};
 

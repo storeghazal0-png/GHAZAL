@@ -644,6 +644,7 @@ export async function processPOSCheckout(data: any): Promise<{
     }
 
     // Real-time synchronization with Admin: Goods movement & cache invalidation
+    invalidateLivePOSCatalog();
     try {
       await recordPOSSaleGoodsMovements(
         saleResult.reference,
@@ -2518,11 +2519,24 @@ export async function getPOSSalesHistory(filters?: {
 // LIVE POS CATALOG SYNCHRONIZATION (تزامن فوري للأصناف والأسعار مع الإدارة)
 // ====================================================================
 
+let livePOSCatalogCached: any = null;
+let livePOSCatalogExpiresAt = 0;
+
+export async function invalidateLivePOSCatalog() {
+  livePOSCatalogCached = null;
+  livePOSCatalogExpiresAt = 0;
+}
+
 export async function getLivePOSCatalog(): Promise<{
   success: boolean;
   products: any[];
   timestamp: string;
 }> {
+  const now = Date.now();
+  if (livePOSCatalogCached && livePOSCatalogExpiresAt > now) {
+    return livePOSCatalogCached;
+  }
+
   try {
     let products: any[] = [];
     try {
@@ -2591,11 +2605,15 @@ export async function getLivePOSCatalog(): Promise<{
       ...catalogPOSProducts.filter(cp => !existingIds.has(cp.id))
     ];
 
-    return {
+    const result = {
       success: true,
       products: combined,
       timestamp: new Date().toISOString()
     };
+    livePOSCatalogCached = result;
+    livePOSCatalogExpiresAt = now + 30_000;
+
+    return result;
   } catch (error: any) {
     console.error('Error fetching live POS catalog:', error);
     return {
@@ -2622,6 +2640,7 @@ export async function quickUpdatePOSProduct(
   }
 ) {
   await requirePermission('manage:products');
+  invalidateLivePOSCatalog();
   try {
     if (!data.nameAr || !data.barcode || data.priceFils < 0) {
       return { success: false, error: 'البيانات المدخلة غير صحيحة أو السعر سالب' };

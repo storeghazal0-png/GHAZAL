@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { cache } from 'react';
 import { prisma } from '@/lib/db';
 import { notFound } from 'next/navigation';
 import { filsToDisplay } from '@/lib/money';
@@ -16,59 +16,13 @@ import { ShieldCheck, Truck, RotateCcw, Heart, Share2, CheckCircle2 } from 'luci
 export const revalidate = 60;
 export const dynamicParams = true;
 
-export async function generateStaticParams() {
-  return COSMETICS_CATALOG.filter(p => !p.isPOSOnly).map(p => ({ slug: p.slug }));
-}
-
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string; locale: string }>;
-}): Promise<Metadata> {
-  const { slug, locale } = await params;
-  const isAr = locale === 'ar';
-  const cleanSlug = decodeURIComponent(slug || '').trim();
-
-  let product: any = null;
+/**
+ * Request-scoped deduplicated product query via React cache().
+ * Eliminates duplicate database roundtrips between generateMetadata and ProductPage.
+ */
+const getProductBySlugCached = cache(async (cleanSlug: string) => {
   try {
-    product = await prisma.product.findFirst({
-      where: {
-        isVisible: true,
-        channel: { in: ['ONLINE', 'SHARED'] },
-        OR: [
-          { slug: cleanSlug },
-          { id: cleanSlug },
-        ],
-      },
-      include: {
-        images: { where: { isMain: true }, take: 1 },
-        category: true,
-        brand: true,
-      },
-    });
-  } catch {}
-
-  const demo = getProductBySlug(cleanSlug);
-  const name = product ? (isAr ? product.nameAr : product.nameEn) : (demo ? (isAr ? demo.nameAr : demo.nameEn) : 'منتج غزل');
-  const description = product?.shortDescription || demo?.shortDescription || (isAr
-    ? `${name} — مستحضرات تجميل ومكياج من محل غزل (عين الباشا)`
-    : `${name} — Quality Cosmetics from Ghazal Cosmetics`);
-
-  return {
-    title: `${name} | محل غزل للمكياج والتجميل`,
-    description,
-    keywords: [name, 'محل غزل', 'مكياج', 'عين الباشا', 'مستحضرات تجميل الأردن'],
-  };
-}
-
-export default async function ProductPage({ params }: { params: Promise<{ slug: string; locale: string }> }) {
-  const { slug, locale } = await params;
-  const isAr = locale === 'ar';
-  const cleanSlug = decodeURIComponent(slug || '').trim();
-
-  let dbProduct: any = null;
-  try {
-    dbProduct = await prisma.product.findFirst({
+    return await prisma.product.findFirst({
       where: {
         isVisible: true,
         channel: { in: ['ONLINE', 'SHARED'] },
@@ -97,11 +51,48 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         images: { orderBy: { order: 'asc' } },
         category: true,
         brand: true,
-      }
+      },
     });
   } catch (err) {
     console.warn('Prisma lookup failed in product page, using fallback catalog:', err);
+    return null;
   }
+});
+
+export async function generateStaticParams() {
+  return COSMETICS_CATALOG.filter(p => !p.isPOSOnly).map(p => ({ slug: p.slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; locale: string }>;
+}): Promise<Metadata> {
+  const { slug, locale } = await params;
+  const isAr = locale === 'ar';
+  const cleanSlug = decodeURIComponent(slug || '').trim();
+
+  const product = await getProductBySlugCached(cleanSlug);
+
+  const demo = getProductBySlug(cleanSlug);
+  const name = product ? (isAr ? product.nameAr : product.nameEn) : (demo ? (isAr ? demo.nameAr : demo.nameEn) : 'منتج غزل');
+  const description = product?.shortDescription || demo?.shortDescription || (isAr
+    ? `${name} — مستحضرات تجميل ومكياج من محل غزل (عين الباشا)`
+    : `${name} — Quality Cosmetics from Ghazal Cosmetics`);
+
+  return {
+    title: `${name} | محل غزل للمكياج والتجميل`,
+    description,
+    keywords: [name, 'محل غزل', 'مكياج', 'عين الباشا', 'مستحضرات تجميل الأردن'],
+  };
+}
+
+export default async function ProductPage({ params }: { params: Promise<{ slug: string; locale: string }> }) {
+  const { slug, locale } = await params;
+  const isAr = locale === 'ar';
+  const cleanSlug = decodeURIComponent(slug || '').trim();
+
+  const dbProduct = await getProductBySlugCached(cleanSlug);
 
   // Fallback to rich demo catalog if not in database
   const demoProduct = getProductBySlug(cleanSlug);
@@ -118,7 +109,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     undefined;
 
   // Normalize product data
-  const product = dbProduct ? {
+  const product: any = dbProduct ? {
     ...dbProduct,
     tag: assignedTag,
   } : {

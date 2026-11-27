@@ -214,9 +214,11 @@ const defaultLocationSettings = {
 
 let memoryCarouselSettings: any = (globalThis as any).__ghazal_hero_carousel_settings || defaultCarouselSettings;
 (globalThis as any).__ghazal_hero_carousel_settings = memoryCarouselSettings;
+let carouselSettingsExpiresAt = 0;
 
 let memoryHeroSlides: any[] = (globalThis as any).__ghazal_hero_slides || defaultSlides;
 (globalThis as any).__ghazal_hero_slides = memoryHeroSlides;
+let heroSlidesExpiresAt = 0;
 
 let memoryLocationSettings: any = (globalThis as any).__ghazal_location_settings || defaultLocationSettings;
 (globalThis as any).__ghazal_location_settings = memoryLocationSettings;
@@ -226,23 +228,31 @@ let memoryLocationSettings: any = (globalThis as any).__ghazal_location_settings
 // ----------------------------------------------------------------------
 
 export async function getHeroCarouselSettings() {
+  const now = Date.now();
+  if (carouselSettingsExpiresAt > now && memoryCarouselSettings) {
+    return memoryCarouselSettings;
+  }
   try {
     const settings = await prisma.homepageHeroCarouselSettings.findUnique({
       where: { id: 'default' }
     });
     if (settings) {
       memoryCarouselSettings = settings;
+      (globalThis as any).__ghazal_hero_carousel_settings = settings;
+      carouselSettingsExpiresAt = now + 60_000;
       return settings;
     }
   } catch (err) {
     console.warn('Prisma getHeroCarouselSettings fallback active');
   }
+  carouselSettingsExpiresAt = now + 15_000;
   return memoryCarouselSettings;
 }
 
 export async function updateHeroCarouselSettings(data: z.infer<typeof carouselSettingsSchema>) {
   const session = await requirePermission('manage:settings');
   await validateOriginAndHost();
+  carouselSettingsExpiresAt = 0;
   
   const parsed = carouselSettingsSchema.parse(data);
   memoryCarouselSettings = { ...parsed, id: 'default', updatedByEmployeeId: session.employeeId };
@@ -278,6 +288,10 @@ export async function updateHeroCarouselSettings(data: z.infer<typeof carouselSe
 // ----------------------------------------------------------------------
 
 export async function getHeroSlides() {
+  const now = Date.now();
+  if (heroSlidesExpiresAt > now && memoryHeroSlides && memoryHeroSlides.length > 0) {
+    return memoryHeroSlides;
+  }
   try {
     const slides = await prisma.homepageHeroSlide.findMany({
       orderBy: { displayOrder: 'asc' },
@@ -288,17 +302,21 @@ export async function getHeroSlides() {
     });
     if (slides && slides.length > 0) {
       memoryHeroSlides = slides;
+      (globalThis as any).__ghazal_hero_slides = slides;
+      heroSlidesExpiresAt = now + 60_000;
       return slides;
     }
   } catch (err) {
     console.warn('Prisma getHeroSlides fallback active');
   }
+  heroSlidesExpiresAt = now + 15_000;
   return memoryHeroSlides;
 }
 
 export async function createHeroSlide(data: z.infer<typeof slideInputSchema>) {
   const session = await requirePermission('manage:settings');
   await validateOriginAndHost();
+  heroSlidesExpiresAt = 0;
 
   const parsed = slideInputSchema.parse(data);
 
@@ -374,6 +392,7 @@ export async function createHeroSlide(data: z.infer<typeof slideInputSchema>) {
 export async function updateHeroSlide(id: string, data: z.infer<typeof slideInputSchema>) {
   const session = await requirePermission('manage:settings');
   await validateOriginAndHost();
+  heroSlidesExpiresAt = 0;
 
   const parsed = slideInputSchema.parse(data);
 
@@ -442,6 +461,7 @@ export async function updateHeroSlide(id: string, data: z.infer<typeof slideInpu
 export async function deleteHeroSlide(id: string) {
   const session = await requirePermission('manage:settings');
   await validateOriginAndHost();
+  heroSlidesExpiresAt = 0;
 
   try {
     await prisma.homepageHeroSlide.delete({
@@ -470,6 +490,7 @@ export async function deleteHeroSlide(id: string) {
 export async function reorderHeroSlides(ids: string[]) {
   const session = await requirePermission('manage:settings');
   await validateOriginAndHost();
+  heroSlidesExpiresAt = 0;
 
   try {
     await prisma.$transaction(

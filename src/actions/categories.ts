@@ -37,11 +37,23 @@ const DEFAULT_STORE_CATEGORIES: SyncedCategory[] = [
 
 // In-memory runtime categories store (ensures offline and fallback resilience)
 let inMemoryCategories: SyncedCategory[] = [...DEFAULT_STORE_CATEGORIES];
+let categoriesCachedResult: SyncedCategory[] | null = null;
+let categoriesExpiresAt = 0;
+
+export async function invalidateCategoriesCache() {
+  categoriesCachedResult = null;
+  categoriesExpiresAt = 0;
+}
 
 /**
  * Get synchronized categories across DB, SiteSettings, and In-Memory store
  */
 export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
+  const now = Date.now();
+  if (categoriesCachedResult && categoriesExpiresAt > now) {
+    return categoriesCachedResult;
+  }
+
   let categories: SyncedCategory[] = [];
 
   // 1. Try fetching from database
@@ -160,16 +172,21 @@ export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
       });
 
       // Database returned categories directly from PostgreSQL - return immediately!
+      categoriesCachedResult = categories;
+      categoriesExpiresAt = Date.now() + 60_000;
       return categories;
     }
   } catch (err) {
     console.warn('DB categories query failed:', err);
   }
 
+  categoriesCachedResult = categories;
+  categoriesExpiresAt = Date.now() + 15_000;
   return categories;
 }
 
 function revalidateCategoryPaths() {
+  invalidateCategoriesCache();
   try {
     revalidatePath('/admin/categories');
     revalidatePath('/admin/products');

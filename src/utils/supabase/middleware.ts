@@ -15,6 +15,17 @@ export async function updateSession(request: NextRequest) {
       return supabaseResponse;
     }
 
+    // Only invoke Supabase auth API if an active Supabase auth cookie exists,
+    // avoiding redundant outbound network subrequests (200-400ms) on anonymous storefront visits.
+    const allCookies = request.cookies.getAll();
+    const hasSupabaseAuthCookie = allCookies.some(c => 
+      c.name.startsWith('sb-') || c.name.includes('auth-token')
+    );
+
+    if (!hasSupabaseAuthCookie) {
+      return supabaseResponse;
+    }
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,

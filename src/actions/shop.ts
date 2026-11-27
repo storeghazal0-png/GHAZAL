@@ -84,11 +84,34 @@ export async function getPaginatedProducts({
           where,
           skip,
           take,
-          include: {
-            variants: { orderBy: { size: 'asc' } },
-            images: { orderBy: { order: 'asc' } },
-            category: true,
-            brand: true,
+          select: {
+            id: true,
+            slug: true,
+            nameAr: true,
+            nameEn: true,
+            shortDescription: true,
+            rating: true,
+            reviewsCount: true,
+            reviewReasons: true,
+            category: { select: { id: true, name: true, slug: true } },
+            brand: { select: { id: true, name: true, nameAr: true } },
+            variants: {
+              where: { isActive: true },
+              orderBy: { price: 'asc' },
+              select: {
+                id: true,
+                size: true,
+                shade: true,
+                colorHex: true,
+                price: true,
+                compareAt: true,
+                isActive: true,
+              }
+            },
+            images: {
+              orderBy: { order: 'asc' },
+              select: { id: true, url: true, isMain: true, order: true }
+            },
           },
           orderBy: { createdAt: 'desc' }
         }),
