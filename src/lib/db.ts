@@ -7,9 +7,18 @@ declare global {
   var __prismaClient: PrismaClient | undefined;
 }
 
-const connectionString = (process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_URL)
+let rawConnection = (process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_URL)
   ? process.env.TEST_DATABASE_URL
   : (process.env.DATABASE_URL || process.env.DIRECT_URL || '');
+
+// In Cloudflare Workers edge environments, Supabase transaction pooler on port 6543
+// abruptly terminates TCP sockets with "Connection terminated unexpectedly".
+// Switching to port 5432 (Session mode / direct) maintains full compatibility with V8 edge isolates.
+if (rawConnection.includes('pooler.supabase.com:6543')) {
+  rawConnection = rawConnection.replace(':6543', ':5432');
+}
+
+const connectionString = rawConnection;
 
 const isDev = process.env.NODE_ENV !== 'production';
 const isRemoteDb = Boolean(
@@ -18,13 +27,19 @@ const isRemoteDb = Boolean(
   !connectionString.includes('127.0.0.1')
 );
 
-// إعداد Connection Pool متوافق مع البيئات السحابية والخوادم اللامركزية (Netlify Serverless)
+const isCloudflare = Boolean(
+  typeof globalThis !== 'undefined' &&
+  (typeof (globalThis as any).WebSocketPair !== 'undefined' ||
+   (typeof navigator !== 'undefined' && (navigator as any)?.userAgent === 'Cloudflare-Workers'))
+);
+
+// إعداد Connection Pool متوافق مع البيئات السحابية والخوادم اللامركزية (Cloudflare Workers / Netlify Serverless)
 const poolConfig = {
   connectionString,
-  // الحد الأقصى للاتصالات المتزامنة
-  max: parseInt(process.env.DB_POOL_MAX || (isDev ? '5' : '10')),
-  // إغلاق الاتصال الخامل بعد 20 ثانية لتوفير موارد الخادم
-  idleTimeoutMillis: 20000,
+  // الحد الأقصى للاتصالات المتزامنة (في بيئات Edge نستخدم اتصالات خفيفة لتفادي الاتصالات العالقة)
+  max: isCloudflare ? 2 : parseInt(process.env.DB_POOL_MAX || (isDev ? '5' : '10')),
+  // إغلاق الاتصال الخامل بسرعة في Edge لتوفير موارد الخادم
+  idleTimeoutMillis: isCloudflare ? 2000 : 20000,
   // الحد الأقصى للانتظار على اتصال جديد
   connectionTimeoutMillis: isDev ? 2000 : 10000,
   // الحد الأدنى للاتصالات الجاهزة (يجب أن يكون 0 دائماً في بيئات Serverless لمنع انهيار الحاوية عند بدء التشغيل)
