@@ -103,10 +103,9 @@ export default async function StoreFrontPage({ params }: { params: Promise<Param
     const allSynchronizedCats = await getSynchronizedCategories();
     if (allSynchronizedCats && allSynchronizedCats.length > 0) {
       dbLoadedSuccessfully = true;
-      // Filter to root categories intended for the online store:
-      // Must be root (!c.parentId), active (isActive !== false), and channel must be ONLINE or SHARED (POS excluded!)
+      // Filter to active root categories (all categories are unified)
       storeCategories = allSynchronizedCats.filter(
-        (c) => !c.parentId && c.isActive !== false && (c.channel === 'ONLINE' || c.channel === 'SHARED' || !c.channel)
+        (c) => !c.parentId && c.isActive !== false
       );
     }
   } catch (err) {

@@ -20,6 +20,7 @@ export interface SyncedCategory {
   onlineCount?: number;
   posCount?: number;
   sharedCount?: number;
+  totalCount?: number;
   _count?: { products: number };
 }
 
@@ -66,17 +67,25 @@ export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
       }).catch(() => [])
     ]);
 
+    // Ensure all categories in DB are unified (channel = SHARED)
+    prisma.category.updateMany({
+      where: { channel: { not: 'SHARED' } },
+      data: { channel: 'SHARED' }
+    }).catch(() => {});
+
     // Build channel product lookup map
-    const countsByCatAndChannel: Record<string, { online: number; pos: number; shared: number }> = {};
+    const countsByCatAndChannel: Record<string, { online: number; pos: number; shared: number; total: number }> = {};
     for (const row of (groupedProductCounts as any[])) {
       if (!row.categoryId) continue;
       if (!countsByCatAndChannel[row.categoryId]) {
-        countsByCatAndChannel[row.categoryId] = { online: 0, pos: 0, shared: 0 };
+        countsByCatAndChannel[row.categoryId] = { online: 0, pos: 0, shared: 0, total: 0 };
       }
       const ch = (row.channel || 'POS').toUpperCase();
-      if (ch === 'ONLINE') countsByCatAndChannel[row.categoryId].online += row._count._all;
-      else if (ch === 'SHARED') countsByCatAndChannel[row.categoryId].shared += row._count._all;
-      else countsByCatAndChannel[row.categoryId].pos += row._count._all;
+      const count = row._count?._all || 0;
+      countsByCatAndChannel[row.categoryId].total += count;
+      if (ch === 'ONLINE') countsByCatAndChannel[row.categoryId].online += count;
+      else if (ch === 'SHARED') countsByCatAndChannel[row.categoryId].shared += count;
+      else countsByCatAndChannel[row.categoryId].pos += count;
     }
 
     // Auto-seed required categories if missing: "العناية بالوجه" and "مزيلات عرق"
@@ -93,6 +102,7 @@ export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
               name: req.name,
               slug: req.slug,
               imagePath: '/logo.png',
+              channel: 'SHARED',
               sortOrder: req.sortOrder
             },
             include: {
@@ -108,62 +118,44 @@ export async function getSynchronizedCategories(): Promise<SyncedCategory[]> {
 
     if (dbCats && dbCats.length > 0) {
       categories = dbCats.map(c => {
-        const catChannel = ((c as any).channel as 'ONLINE' | 'POS' | 'SHARED') || 'SHARED';
-        const stats = countsByCatAndChannel[c.id] || { online: 0, pos: 0, shared: 0 };
-        
-        // Exact product count according to category channel rule:
-        // - ONLINE: products with channel ONLINE or SHARED
-        // - POS: products with channel POS or SHARED
-        // - SHARED: products with channel SHARED
-        let relevantCount = 0;
-        if (catChannel === 'ONLINE') {
-          relevantCount = stats.online + stats.shared;
-        } else if (catChannel === 'POS') {
-          relevantCount = stats.pos + stats.shared;
-        } else {
-          relevantCount = stats.shared;
-        }
+        const stats = countsByCatAndChannel[c.id] || { online: 0, pos: 0, shared: 0, total: 0 };
+        const totalProductsInCat = stats.total || (c._count?.products ?? 0);
 
         return {
           id: c.id,
           name: c.name,
           slug: c.slug,
           imagePath: c.imagePath || '/logo.png',
-          channel: catChannel,
+          channel: 'SHARED',
           isActive: c.isActive !== false,
           sortOrder: c.sortOrder ?? 0,
           parentId: c.parentId,
           parentName: c.parent?.name || null,
-          onlineCount: stats.online + stats.shared,
+          onlineCount: stats.online,
           posCount: stats.pos,
           sharedCount: stats.shared,
+          totalCount: totalProductsInCat,
           children: (c.children || []).map(ch => {
-            const subChannel = ((ch as any).channel as 'ONLINE' | 'POS' | 'SHARED') || catChannel;
-            const subStats = countsByCatAndChannel[ch.id] || { online: 0, pos: 0, shared: 0 };
-            let subRelevantCount = 0;
-            if (subChannel === 'ONLINE') {
-              subRelevantCount = subStats.online + subStats.shared;
-            } else if (subChannel === 'POS') {
-              subRelevantCount = subStats.pos + subStats.shared;
-            } else {
-              subRelevantCount = subStats.shared;
-            }
+            const subStats = countsByCatAndChannel[ch.id] || { online: 0, pos: 0, shared: 0, total: 0 };
+            const subTotal = subStats.total || (ch._count?.products ?? 0);
+
             return {
               id: ch.id,
               name: ch.name,
               slug: ch.slug,
               imagePath: ch.imagePath || '/logo.png',
-              channel: subChannel,
+              channel: 'SHARED',
               isActive: ch.isActive !== false,
               sortOrder: ch.sortOrder ?? 0,
               parentId: ch.parentId,
-              onlineCount: subStats.online + subStats.shared,
+              onlineCount: subStats.online,
               posCount: subStats.pos,
               sharedCount: subStats.shared,
-              _count: { products: subRelevantCount }
+              totalCount: subTotal,
+              _count: { products: subTotal }
             };
           }),
-          _count: { products: relevantCount }
+          _count: { products: totalProductsInCat }
         };
       });
 
@@ -283,8 +275,7 @@ export async function createCategory(formData: FormData) {
       imagePath = await saveUploadedImage(imageFile);
     }
 
-    const rawChannel = (formData.get('channel') as string) || 'SHARED';
-    const channel: 'ONLINE' | 'POS' | 'SHARED' = (rawChannel === 'ONLINE' || rawChannel === 'POS' || rawChannel === 'SHARED') ? rawChannel : 'SHARED';
+    const channel: 'ONLINE' | 'POS' | 'SHARED' = 'SHARED';
 
     let categoryId = `cat-${Date.now()}`;
     const nextSortOrder = inMemoryCategories.length + 1;
@@ -383,10 +374,7 @@ export async function updateCategory(id: string, formData: FormData) {
       data.imagePath = await saveUploadedImage(imageFile);
     }
 
-    const rawChannel = formData.get('channel') as string;
-    if (rawChannel && (rawChannel === 'ONLINE' || rawChannel === 'POS' || rawChannel === 'SHARED')) {
-      data.channel = rawChannel;
-    }
+    data.channel = 'SHARED';
 
     // 1. Try DB update
     try {

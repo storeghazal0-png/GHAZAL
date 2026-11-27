@@ -139,16 +139,10 @@ export function ProductEditForm({
   });
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(initialData.categoryId || '');
 
-  // Filter categories according to the product's channel
+  // Unified categories: all categories are available regardless of product channel
   const filteredCategories = React.useMemo(() => {
-    if (channel === 'STOREFRONT') {
-      return categories.filter(c => c.channel === 'ONLINE' || c.channel === 'SHARED' || !c.channel);
-    }
-    if (channel === 'POS') {
-      return categories.filter(c => c.channel === 'POS' || c.channel === 'SHARED' || !c.channel);
-    }
-    return categories.filter(c => c.channel === 'SHARED' || !c.channel);
-  }, [categories, channel]);
+    return categories;
+  }, [categories]);
 
   useEffect(() => {
     if (filteredCategories.length > 0) {
@@ -483,7 +477,7 @@ export function ProductEditForm({
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-xs font-bold text-zinc-700">التصنيف / القسم *</label>
             <span className="text-[11px] text-zinc-500 font-medium">
-              (تظهر الأقسام المتوافقة مع: <strong className="text-[#E6007E]">{channel === 'STOREFRONT' ? 'المتجر الإلكتروني' : channel === 'POS' ? 'نظام الكاشير' : 'الأقسام المشتركة'}</strong>)
+              (أقسام موحدة تضم منتجات المتجر والكاش)
             </span>
           </div>
           <select
@@ -494,23 +488,15 @@ export function ProductEditForm({
             className="w-full border border-zinc-300 rounded-xl px-3.5 py-2.5 text-sm outline-none bg-white focus:border-[#E6007E] font-medium"
           >
             {filteredCategories.length === 0 ? (
-              <option value="">-- لا توجد أقسام متوافقة مع هذه القناة حالياً --</option>
+              <option value="">-- لا توجد أقسام مسجلة حالياً --</option>
             ) : (
-              filteredCategories.map(c => {
-                const badge = c.channel === 'ONLINE' ? '🌐 متجر' : c.channel === 'POS' ? '🏪 كاش' : '🔄 مشترك';
-                return (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({badge})
-                  </option>
-                );
-              })
+              filteredCategories.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))
             )}
           </select>
-          {filteredCategories.length === 0 && (
-            <p className="text-xs text-amber-600 mt-1.5 font-bold">
-              يرجى التوجه لصفحة أقسام المتجر والكاش لإنشاء قسم مخصص أو قسم مشترك لهذه القناة.
-            </p>
-          )}
         </div>
 
         <div>

@@ -28,8 +28,7 @@ export async function getPaginatedProducts({
       isVisible: true, 
       channel: { in: ['ONLINE', 'SHARED'] },
       category: {
-        isActive: true,
-        channel: { in: ['ONLINE', 'SHARED'] }
+        isActive: true
       }
     };
     
@@ -42,7 +41,6 @@ export async function getPaginatedProducts({
 
       where.category = {
         isActive: true,
-        channel: { in: ['ONLINE', 'SHARED'] },
         OR: [
           { slug: normalizedCategory },
           { slug: cleanCategory },

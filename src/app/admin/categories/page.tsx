@@ -31,10 +31,10 @@ export default async function AdminCategoriesPage() {
         <div className="flex justify-between items-center mb-6 border-b border-[var(--color-ivory-200)] pb-4">
           <div>
             <h1 className="text-3xl font-black font-heading text-[var(--color-charcoal-900)]">
-              أقسام وتصنيفات المتجر والكاش
+              أقسام وتصنيفات المنتجات (المتجر والكاشير)
             </h1>
             <p className="text-zinc-600 mt-1 text-sm">
-              تقسيم وإدارة أقسام المتجر الإلكتروني، أقسام الكاشير، والأقسام المشتركة مع رفع الصور وترتيب المنتجات
+              إدارة الأقسام الموحدة: يحتوي كل قسم على منتجات المتجر الإلكتروني، الكاشير، والمنتجات المشتركة مع إمكانية الترتيب ورفع الصور
             </p>
           </div>
         </div>

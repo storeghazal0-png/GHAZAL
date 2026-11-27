@@ -79,20 +79,18 @@ export default async function ShopPage({
   let dbSuccess = false;
 
   try {
-    // Build prisma where clause (Online storefront only queries ONLINE and SHARED channels)
+    // Build prisma where clause (Online storefront queries active products assigned to ONLINE or SHARED channels)
     const where: any = { 
       isVisible: true,
       channel: { in: ['ONLINE', 'SHARED'] },
       category: {
-        isActive: true,
-        channel: { in: ['ONLINE', 'SHARED'] }
+        isActive: true
       }
     };
     
     if (categoryParam) {
       where.category = {
         isActive: true,
-        channel: { in: ['ONLINE', 'SHARED'] },
         OR: [
           { slug: normalizedCategory },
           { slug: categoryParam },
@@ -140,14 +138,13 @@ export default async function ShopPage({
       prisma.product.count({ where }),
       prisma.category.findMany({ 
         where: { 
-          isActive: true, 
-          channel: { in: ['ONLINE', 'SHARED'] } 
+          isActive: true,
+          parentId: null
         },
         include: {
           children: {
             where: {
               isActive: true,
-              channel: { in: ['ONLINE', 'SHARED'] },
             },
             orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           },
