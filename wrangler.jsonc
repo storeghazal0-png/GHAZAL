@@ -13,7 +13,8 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "54b9a6b656924e5898c441fe1ec40b08"
+      "id": "54b9a6b656924e5898c441fe1ec40b08",
+      "localConnectionString": "postgresql://postgres.ebygsibxdxjxaetrqrya:GhazalStore2026@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
     }
   ],
   "placement": {
