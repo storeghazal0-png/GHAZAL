@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && opennextjs-cloudflare build",
+    "build:local": "prisma generate && next build",
     "build:worker": "prisma generate && opennextjs-cloudflare build",
     "preview:worker": "opennextjs-cloudflare preview",
     "deploy:worker": "pnpm run build:worker && wrangler deploy",
