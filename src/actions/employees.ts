@@ -271,19 +271,119 @@ export async function toggleEmployeeStatus(employeeId: string, adminId?: string)
 }
 
 export async function deleteEmployee(employeeId: string, adminId?: string) {
-  await requireSuperAdmin();
+  const session = await requireSuperAdmin();
+  const currentAdminId = adminId || session.employeeId;
+
+  // Prevent self-deletion
+  if (employeeId === currentAdminId) {
+    return { success: false, error: 'لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول به حفاظاً على استمرارية إدارة النظام.' };
+  }
+
   try {
-    await prisma.employee.delete({
-      where: { id: employeeId }
+    const targetEmployee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { role: true }
+    });
+
+    if (!targetEmployee) {
+      return { success: false, error: 'الموظف غير موجود أو تم حذفه مسبقاً.' };
+    }
+
+    // Perform clean cascade & reassignment inside a transaction to ensure atomic permanent deletion
+    await prisma.$transaction(async (tx) => {
+      // 1. Remove all active sessions and transient records for this employee
+      await tx.session.deleteMany({
+        where: { employeeId }
+      });
+
+      await tx.employeePermission.deleteMany({
+        where: { employeeId }
+      });
+
+      await tx.heldSale.deleteMany({
+        where: { employeeId }
+      });
+
+      await tx.loginAttempt.deleteMany({
+        where: { employeeId }
+      });
+
+      // 2. Reassign historical operational records to current admin to prevent FK (P2003) constraint failures
+      // Sales (as recorder)
+      await tx.sale.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // Sales (as seller snapshot reference)
+      await tx.sale.updateMany({
+        where: { soldByEmployeeId: employeeId },
+        data: { soldByEmployeeId: null }
+      });
+
+      // Returns
+      await tx.return.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // Inventory Movements
+      await tx.inventoryMovement.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // Shifts
+      await tx.shift.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // Cash Movements
+      await tx.cashMovement.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // Audit Logs
+      await tx.auditLog.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // Import Jobs
+      await tx.importJob.updateMany({
+        where: { employeeId },
+        data: { employeeId: currentAdminId }
+      });
+
+      // 3. Finally, permanently delete the employee record from the database
+      await tx.employee.delete({
+        where: { id: employeeId }
+      });
+
+      // 5. Log this permanent deletion action in the audit log
+      await tx.auditLog.create({
+        data: {
+          employeeId: currentAdminId,
+          action: 'EMPLOYEE_PERMANENTLY_DELETED',
+          entityType: 'Employee',
+          entityId: employeeId,
+          details: JSON.stringify({
+            deletedName: targetEmployee.name,
+            deletedEmail: targetEmployee.email,
+            deletedRole: targetEmployee.role?.name,
+            reassignedToAdminId: currentAdminId
+          })
+        }
+      });
     });
 
     revalidatePath('/admin/employees');
     return { success: true };
   } catch (err: any) {
-    if (err.code === 'P2003') {
-      return { success: false, error: 'لا يمكن حذف هذا الموظف لوجود مبيعات أو حركات مرتبطة به في النظام. يرجى استخدام زر التعطيل بدلاً من ذلك.' };
-    }
-    return { success: false, error: err.message || 'فشل حذف الموظف' };
+    console.error('Permanent employee deletion error:', err);
+    return { success: false, error: err.message || 'فشل حذف الموظف نهائياً' };
   }
 }
 

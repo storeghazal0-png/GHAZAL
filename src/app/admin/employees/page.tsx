@@ -19,7 +19,6 @@ export default async function AdminEmployeesPage({
   const action = resolvedParams.action;
   const editId = resolvedParams.id;
 
-  const allowedRoles = ['Admin', 'Cashier'];
   let roles: any[] = [];
   let allPermissions: any[] = [];
   let employees: any[] = [];
@@ -27,17 +26,16 @@ export default async function AdminEmployeesPage({
   let editEmployeePermIds: string[] = [];
 
   try {
-    const allRoles = await prisma.role.findMany();
-    // Ensure Admin and Cashier roles exist
-    for (const roleName of allowedRoles) {
-      if (!allRoles.find(r => r.name === roleName)) {
-        await prisma.role.create({ data: { name: roleName } });
-      }
-    }
-
-    roles = await prisma.role.findMany({
-      where: { name: { in: allowedRoles } }
+    const allRoles = await prisma.role.findMany({
+      orderBy: { name: 'asc' }
     });
+
+    roles = allRoles;
+    if (roles.length === 0) {
+      const rAdmin = await prisma.role.create({ data: { name: 'ADMIN', description: 'المدير العام للنظام' } });
+      const rCashier = await prisma.role.create({ data: { name: 'CASHIER', description: 'كاشير نقطة البيع' } });
+      roles = [rAdmin, rCashier];
+    }
     allPermissions = await prisma.permission.findMany();
 
     // Auto-seed missing POS permissions
@@ -293,8 +291,8 @@ export default async function AdminEmployeesPage({
                   <option value="">اختر الدور الوظيفي...</option>
                   {roles.map((role) => {
                     let displayName = role.name;
-                    if (role.name === 'Admin') displayName = 'أدمن رئيسي (Admin)';
-                    if (role.name === 'Cashier') displayName = 'كاشير (Cashier)';
+                    if (role.name?.toUpperCase() === 'ADMIN') displayName = 'أدمن رئيسي (Admin)';
+                    if (role.name?.toUpperCase() === 'CASHIER') displayName = 'كاشير نقطة البيع (Cashier)';
                     return (
                       <option key={role.id} value={role.id}>
                         {displayName}
@@ -382,15 +380,22 @@ export default async function AdminEmployeesPage({
                       {emp.isActive ? 'تعطيل' : 'تفعيل'}
                     </button>
                   </form>
-                  <form action={handleDelete} className="inline-block">
-                    <input type="hidden" name="targetId" value={emp.id} />
-                    <button
-                      type="submit"
-                      className="text-xs px-3 py-1.5 rounded font-bold transition-colors text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100"
-                    >
-                      حذف نهائي
-                    </button>
-                  </form>
+                  {emp.id !== session.employeeId ? (
+                    <form action={handleDelete} className="inline-block">
+                      <input type="hidden" name="targetId" value={emp.id} />
+                      <button
+                        type="submit"
+                        className="text-xs px-3 py-1.5 rounded font-bold transition-colors text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 cursor-pointer"
+                        title="حذف هذا الحساب نهائياً من قاعدة البيانات"
+                      >
+                        حذف نهائي
+                      </button>
+                    </form>
+                  ) : (
+                    <span className="text-[11px] text-zinc-400 font-bold self-center px-2">
+                      (حسابك الحالي)
+                    </span>
+                  )}
                   <form action={handleRevoke} className="inline-block">
                     <input type="hidden" name="targetId" value={emp.id} />
                     <button
