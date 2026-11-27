@@ -54,7 +54,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     // Fetch shipping zones (all 12 Jordan Governorates)
     fetch('/api/shipping-zones')
       .then(res => res.json())
-      .then(data => {
+      .then((data: any) => {
         if (data.success && data.zones && data.zones.length > 0) {
           setZones(data.zones);
           setSelectedZoneId((prev) => {

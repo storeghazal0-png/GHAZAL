@@ -198,7 +198,7 @@ export async function createEmployee(data: {
         data: data.selectedPermissionIds.map((pId) => ({
           employeeId: employee.id,
           permissionId: pId,
-          grantedByEmployeeId: data.bootstrapAdminId || session.employee.id,
+          grantedByEmployeeId: data.bootstrapAdminId || session.employeeId || session.employee?.id,
           effect: 'ALLOW',
           reason: 'Direct Admin Assignment'
         }))

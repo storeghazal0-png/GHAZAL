@@ -8,7 +8,6 @@ import { HeroCarousel } from '@/components/HeroCarousel';
 import { getHeroSlides, getHeroCarouselSettings } from '@/actions/homepage-cms';
 import { getSynchronizedCategories } from '@/actions/categories';
 import { HomeProductShowcase } from '@/components/HomeProductShowcase';
-import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { getActivePromotions, findActivePromotionForProduct, computeProductPromotionPricing } from '@/lib/promotions';
 import { getProductCustomBadges } from '@/actions/products';
 import {
@@ -213,6 +212,7 @@ export default async function StoreFrontPage({ params }: { params: Promise<Param
               <Link
                 key={cat.id || idx}
                 href={cat.href}
+                prefetch={false}
                 className="flex flex-col items-center gap-2.5 shrink-0 group focus:outline-none"
               >
                 <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden object-cover border-2 border-pink-100 hover:border-[#E6007E] group-hover:border-[#E6007E] group-hover:scale-105 group-hover:shadow-md transition-all duration-300 shadow-xs relative flex items-center justify-center bg-gradient-to-tr from-[#FADAE6]/50 via-pink-50 to-white">
@@ -289,6 +289,7 @@ export default async function StoreFrontPage({ params }: { params: Promise<Param
               <div className="pt-3 sm:pt-6 z-10">
                 <Link
                   href={`/${locale}/shop?category=makeup`}
+                  prefetch={false}
                   className="inline-flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-5 sm:py-2.5 bg-[#E6007E] hover:bg-[#C5006C] text-white font-bold rounded-lg sm:rounded-xl text-[10px] sm:text-xs transition-colors shadow-xs"
                 >
                   <span>{isAr ? 'تسوقي الآن' : 'Shop Now'}</span>

@@ -3,7 +3,7 @@ import { recordDeviceHeartbeat } from '@/actions/pos-devices';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body: any = await req.json().catch(() => ({}));
     const machineKey = body.machineKey || 'GHAZAL-MAC-AIN-ALBASHA-2026';
     await recordDeviceHeartbeat(machineKey);
 

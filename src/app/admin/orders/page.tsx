@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db';
 import { AdminSidebar } from '@/components/AdminSidebar';
 import { filsToDisplay } from '@/lib/money';
 import Link from 'next/link';
-import { getDemoOrders, GHAZAL_DEMO_ORDERS } from '@/lib/orders-catalog';
 import { ShoppingBag, Clock, PackageCheck, Truck, CheckCircle2, XCircle, Layers, Search, Printer, FileText } from 'lucide-react';
 
 export default async function AdminOrdersPage({

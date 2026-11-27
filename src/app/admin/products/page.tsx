@@ -7,7 +7,6 @@ import { getProductCustomBadges } from '@/actions/products';
 import { getSynchronizedCategories } from '@/actions/categories';
 import { AdminProductsClient } from './AdminProductsClient';
 import { filsToDisplay } from '@/lib/money';
-import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;

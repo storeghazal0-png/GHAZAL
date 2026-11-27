@@ -14,6 +14,7 @@ import SuggestedProducts from '@/components/SuggestedProducts';
 import { ShieldCheck, Truck, RotateCcw, Heart, Share2, CheckCircle2 } from 'lucide-react';
 
 export const revalidate = 60;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
   return COSMETICS_CATALOG.filter(p => !p.isPOSOnly).map(p => ({ slug: p.slug }));

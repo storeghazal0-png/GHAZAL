@@ -117,6 +117,7 @@ export function Header() {
 
           <Link
             href={`/${locale}/shop`}
+            prefetch={false}
             className="md:hidden p-2 hover:text-[#E6007E] transition-colors"
             aria-label="Search"
           >
@@ -125,6 +126,7 @@ export function Header() {
 
           <Link
             href={`/${locale}/wishlist`}
+            prefetch={false}
             className="hover:text-[#E6007E] transition-colors relative p-1.5"
             aria-label="Wishlist"
           >
@@ -133,6 +135,7 @@ export function Header() {
 
           <Link
             href={`/${locale}/cart`}
+            prefetch={false}
             className="hover:text-[#E6007E] transition-colors relative p-1.5"
             aria-label="Cart"
           >
@@ -159,6 +162,7 @@ export function Header() {
               <Link
                 key={idx}
                 href={cat.href}
+                prefetch={false}
                 className={`hover:text-[#E6007E] transition-colors pb-0.5 flex items-center gap-1 ${
                   isActive ? 'text-[#E6007E] border-b-2 border-[#E6007E]' : ''
                 } ${isOffer ? 'text-[#E6007E] font-black' : ''}`}

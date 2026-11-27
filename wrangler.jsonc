@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ghazal-cosmetics",
+  "name": "ghazal-1",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": [
@@ -10,6 +10,12 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "54b9a6b656924e5898c441fe1ec40b08"
+    }
+  ],
   "placement": {
     "region": "aws:eu-central-1"
   }

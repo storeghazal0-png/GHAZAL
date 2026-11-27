@@ -312,7 +312,7 @@ export function ProductEditForm({
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const data = await res.json();
+      const data: any = await res.json();
       if (data.success && data.url) {
         updateVariant(index, 'imageUrl', data.url);
       } else {

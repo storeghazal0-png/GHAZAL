@@ -6,7 +6,6 @@ import { MobileCategoriesFeed } from '@/components/MobileCategoriesFeed';
 import { PaginatedProductGrid } from '@/components/PaginatedProductGrid';
 import type { Metadata } from 'next';
 import { Sparkles, ShoppingBag, ArrowLeft, Tag } from 'lucide-react';
-import { COSMETICS_CATALOG } from '@/lib/cosmetics-catalog';
 import { getActivePromotions, computeProductPromotionPricing, findActivePromotionForProduct } from '@/lib/promotions';
 import { getProductCustomBadges } from '@/actions/products';
 

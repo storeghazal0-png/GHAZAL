@@ -1,3 +1,15 @@
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
+
+if (process.env.NODE_ENV === 'development') {
+  if (process.env.DIRECT_URL || process.env.DATABASE_URL) {
+    process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE = 
+      process.env.DIRECT_URL || process.env.DATABASE_URL;
+  }
+  try {
+    initOpenNextCloudflareForDev();
+  } catch {}
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -17,6 +29,10 @@ const nextConfig = {
         '192.168.*',
         '10.*',
         '172.*',
+        '*.workers.dev',
+        '*.storeghazal0.workers.dev',
+        'ghazal.storeghazal0.workers.dev',
+        'ghazal-1.storeghazal0.workers.dev',
         '*.netlify.app',
         'netlify.app',
         '*.vercel.app',
